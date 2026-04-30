@@ -1,0 +1,186 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  Checking
+  Savings
+  Investment
+  Crypto
+  CreditCard
+  Loan
+  Other
+}
+
+enum AccountSource {
+  SimpleFin
+  Coinbase
+  Kraken
+  Manual
+}
+
+enum TransactionStatus {
+  confirmed
+  pending
+  due
+}
+
+enum RecurrenceFrequency {
+  weekly
+  monthly
+  yearly
+}
+
+enum ExchangeType {
+  Coinbase
+  Kraken
+}
+
+enum SyncStatus {
+  running
+  success
+  partial
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model Account {
+  id                   String             @id @default(uuid())
+  name                 String
+  type                 AccountType
+  source               AccountSource
+  externalId           String?            @unique
+  currentBalanceCents  Int                @default(0)
+  hasHoldings          Boolean            @default(false)
+  isActive             Boolean            @default(true)
+  exchangeConnectionId String?
+  lastSyncedAt         DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  exchangeConnection   ExchangeConnection? @relation(fields: [exchangeConnectionId], references: [id])
+  transactions         Transaction[]
+  balanceSnapshots     BalanceSnapshot[]
+  holdings             Holding[]
+}
+
+model Transaction {
+  id                  String               @id @default(uuid())
+  accountId           String
+  externalId          String?              @unique
+  date                DateTime             @db.Date
+  merchant            String
+  amountCents         Int
+  category            String               @default("Uncategorized")
+  categoryOverridden  Boolean              @default(false)
+  notes               String?
+  status              TransactionStatus    @default(confirmed)
+  isRecurringRoot     Boolean              @default(false)
+  recurrenceFrequency RecurrenceFrequency?
+  recurrenceSeriesId  String?
+  scheduledDate       DateTime?            @db.Date
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  account             Account              @relation(fields: [accountId], references: [id])
+}
+
+model BalanceSnapshot {
+  id            String   @id @default(uuid())
+  accountId     String
+  date          DateTime @db.Date
+  balanceCents  Int
+  createdAt     DateTime @default(now())
+
+  account       Account  @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, date])
+}
+
+model Holding {
+  id               String   @id @default(uuid())
+  accountId        String
+  symbol           String?
+  description      String
+  shares           Decimal? @db.Decimal(18, 6)
+  costBasisCents   Int?
+  marketValueCents Int
+  isManual         Boolean  @default(false)
+  lastUpdatedAt    DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  account          Account  @relation(fields: [accountId], references: [id])
+}
+
+model SimplefinConnection {
+  id                 String    @id @default(uuid())
+  encryptedAccessUrl String
+  iv                 String
+  authTag            String
+  lastSyncedAt       DateTime?
+  firstSyncedAt      DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model ExchangeConnection {
+  id                 String       @id @default(uuid())
+  exchange           ExchangeType
+  encryptedApiKey    String
+  encryptedApiSecret String
+  iv                 String
+  authTag            String
+  lastSyncedAt       DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  accounts           Account[]
+}
+
+model SyncLog {
+  id                    String     @id @default(uuid())
+  startedAt             DateTime
+  completedAt           DateTime?
+  status                SyncStatus
+  accountsSynced        Int        @default(0)
+  transactionsInserted  Int        @default(0)
+  transactionsUpdated   Int        @default(0)
+  errors                Json?
+  createdAt             DateTime   @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Views (managed via --create-only migrations + manual SQL)
+// ---------------------------------------------------------------------------
+
+view LiquidCashView {
+  id         Int @unique // dummy key — view always returns one row (id = 1)
+  totalCents Int
+
+  @@map("v_liquid_cash")
+}
+
+view NetWorthView {
+  id                    Int @unique // dummy key — view always returns one row (id = 1)
+  totalAssetsCents      Int
+  totalLiabilitiesCents Int
+  netWorthCents         Int
+
+  @@map("v_net_worth")
+}
