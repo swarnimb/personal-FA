@@ -63,7 +63,7 @@
 | 50 | Holdings table CALC-01 cleanup (Investments) | [x] |
 | 51 | Cash Flow section redesign (Dashboard) | [x] |
 | 52 | Slim unused Cash Flow SQL after visualization removal | [x] |
-| 53 | Extract dashboard data-layer queries into a testable module | [ ] |
+| 53 | Extract dashboard data-layer queries into a testable module | [x] |
 | 54 | Add CALC-01 integration test suite against amibroke_test | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
@@ -1838,11 +1838,15 @@ module-private to `src/app/(main)/page.tsx` with no import seam, so the financia
   inline definitions; keep `DashboardPage` and its render unchanged.
 
 **Acceptance criteria:**
-- [ ] Functions moved verbatim — zero behavior change; SQL bodies byte-identical (CALC-01: no math relocated into TS)
-- [ ] `page.tsx` imports from `@/lib/dashboard-queries`; no query logic remains inline
-- [ ] Unit suite still 160/160; `tsc` clean for touched files (pre-existing `spending-metrics.test.tsx` error excluded — out of scope)
-- [ ] Browser smoke: Dashboard renders identical figures (Net Worth, Cash Flow retention %, Liquid Cash, trend) at both YTD and Max ranges
-- [ ] No unused imports remain; no file exceeds the CQ-02 limit (services < 300 lines)
+- [x] Functions moved verbatim — zero behavior change; SQL bodies byte-identical (CALC-01: no math relocated into TS)
+- [x] `page.tsx` imports from `@/lib/dashboard-queries`; no query logic remains inline
+- [x] Unit suite still 160/160; `tsc` clean for touched files (pre-existing `spending-metrics.test.tsx` error excluded — out of scope)
+- [x] Browser smoke: Dashboard renders identical figures (Net Worth, Cash Flow retention %, Liquid Cash, trend) at both YTD and Max ranges
+- [x] No unused imports remain; no file exceeds the CQ-02 limit (services < 300 lines — `dashboard-queries.ts` is 232 lines)
+
+> **Note (TrendPoint):** spec named a `TrendPoint` type to move, but none exists in source —
+> the two trend fns return inline anonymous types. Not invented (verbatim-move mandate;
+> Task 54 criteria don't reference it). `CashFlowMetrics` moved + exported. Builder flagged.
 
 **Tests required:**
 - Existing `dashboard.test.tsx` continues to pass unchanged (presentational coverage unaffected)
