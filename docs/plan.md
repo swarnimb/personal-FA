@@ -64,7 +64,7 @@
 | 51 | Cash Flow section redesign (Dashboard) | [x] |
 | 52 | Slim unused Cash Flow SQL after visualization removal | [x] |
 | 53 | Extract dashboard data-layer queries into a testable module | [x] |
-| 54 | Add CALC-01 integration test suite against amibroke_test | [ ] |
+| 54 | Add CALC-01 integration test suite against amibroke_test | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -1875,14 +1875,14 @@ the core guarantee is unverified by automation.
   `prisma/seed-demo.ts`, not `prisma/seed.ts`; correct `amibroke_test` setup/reset commands)
 
 **Acceptance criteria:**
-- [ ] Tests run against `amibroke_test` DB seeded by `prisma/seed-demo.ts` — never the production DB; test DB URL from env, not hardcoded (SEC-01)
-- [ ] `getCashFlowMetrics`: happy — seeded data yields a known retention % and `liquidCashEndCents`; edge — zero `money_in` ⇒ retention `0` (TS-01)
-- [ ] `getNetWorthHistory`: asserts CreditCard/Loan balances are negated in the net worth total (CONSTRAINT-11)
-- [ ] Liquid cash = active Checking + Savings only; inactive accounts and CreditCard excluded (CONSTRAINT-12)
-- [ ] Transaction-rollback reconstruction (`position_at_end`) verified against a known seeded transaction series
-- [ ] TS-03: DB-dependent tests isolated in `*.integration.test.ts` with a separate run target; `npm test` (unit) stays 160/160 and mock-only
-- [ ] `docs/testing-setup.md` seed/reset instructions match reality
-- [ ] No silent failures — a DB connection error fails loudly with context (EH-02), it does not skip the suite green
+- [x] Tests run against `amibroke_test` DB seeded by `prisma/seed-demo.ts` — never the production DB; test DB URL from env, not hardcoded (SEC-01)
+- [x] `getCashFlowMetrics`: happy — seeded data yields a known retention % and `liquidCashEndCents`; edge — zero `money_in` ⇒ retention `0` (TS-01)
+- [x] `getNetWorthHistory`: asserts CreditCard/Loan balances are negated in the net worth total (CONSTRAINT-11)
+- [x] Liquid cash = active Checking + Savings only; inactive accounts and CreditCard excluded (CONSTRAINT-12)
+- [x] Transaction-rollback reconstruction (`position_at_end`) verified against a known seeded transaction series
+- [x] TS-03: DB-dependent tests isolated in `*.integration.test.ts` with a separate run target; `npm test` (unit) stays 160/160 and mock-only
+- [x] `docs/testing-setup.md` seed/reset instructions match reality
+- [x] No silent failures — a DB connection error fails loudly with context (EH-02), it does not skip the suite green
 
 **Tests required:**
 - `describe getCashFlowMetrics` → `happy: known seed ⇒ expected retention% + liquidCashEnd`
