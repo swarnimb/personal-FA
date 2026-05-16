@@ -98,48 +98,24 @@ async function getNetWorthHistory(
   }))
 }
 
-/** Current liquid cash snapshot — not affected by time range. */
-async function getCashFlowSnapshot(): Promise<{ liquidCashCents: number }> {
-  const rows = await db.$queryRaw<{ liquidCashCents: bigint }[]>(Prisma.sql`
-    SELECT (
-      COALESCE((SELECT SUM("currentBalanceCents") FROM "Account"
-        WHERE type IN ('Checking', 'Savings') AND "isActive" = true), 0)
-      -
-      COALESCE((SELECT SUM("currentBalanceCents") FROM "Account"
-        WHERE type = 'CreditCard' AND "isActive" = true), 0)
-    )::int AS "liquidCashCents"
-  `)
-  return { liquidCashCents: Number(rows[0]?.liquidCashCents ?? 0) }
-}
-
 interface CashFlowMetrics {
-  liquidCashStartCents: number
   liquidCashEndCents: number
   deltaLiquidCashCents: number
-  moneyInCents: number
-  spentCents: number
-  movedCents: number
   retentionPercent: number
 }
 
 /**
  * Cash flow metrics for the selected period — liquid cash only (Checking + Savings).
  *
- * Reconciliation guarantee: moneyIn - spent - moved = deltaLiquidCash, because all four
- * derive from the identical filter (confirmed txns on active Checking+Savings in [from,to]).
- *   - End position: currentBalance rolled back over confirmed txns dated > to.
- *   - Delta: signed sum of all confirmed amounts in [from,to].
- *   - Start: End - Delta (keeps Start/Δ/End mutually consistent by construction).
- * A "transfer" is a single txn categorized 'Transfer Out' (outflow) / 'Transfer In' (inflow).
+ * retentionPercent = delta / moneyIn, where delta is the signed sum of all confirmed
+ * amounts in [from,to] and moneyIn the positive subset — both derived from the identical
+ * filter (confirmed txns on active Checking+Savings in [from,to]). End position:
+ * currentBalance rolled back over confirmed txns dated > to. All math stays in SQL (CALC-01).
  */
 async function getCashFlowMetrics(from: Date, to: Date): Promise<CashFlowMetrics> {
   const rows = await db.$queryRaw<{
-    liquidCashStartCents: bigint
     liquidCashEndCents: bigint
     deltaLiquidCashCents: bigint
-    moneyInCents: bigint
-    spentCents: bigint
-    movedCents: bigint
     retentionPercent: number
   }[]>(Prisma.sql`
     WITH liquid_accounts AS (
@@ -155,7 +131,7 @@ async function getCashFlowMetrics(from: Date, to: Date): Promise<CashFlowMetrics
       ), 0)::int AS cents FROM liquid_accounts a
     ),
     period_txns AS (
-      SELECT t."amountCents", t.category
+      SELECT t."amountCents"
       FROM "Transaction" t
       INNER JOIN liquid_accounts a ON t."accountId" = a.id
       WHERE t.status = 'confirmed' AND t.date >= ${from} AND t.date <= ${to}
@@ -163,22 +139,12 @@ async function getCashFlowMetrics(from: Date, to: Date): Promise<CashFlowMetrics
     flows AS (
       SELECT
         COALESCE(SUM(p."amountCents"), 0)::int AS delta,
-        COALESCE(SUM(p."amountCents") FILTER (WHERE p."amountCents" > 0), 0)::int AS money_in,
-        COALESCE(SUM(ABS(p."amountCents")) FILTER (
-          WHERE p."amountCents" < 0 AND p.category <> 'Transfer Out'
-        ), 0)::int AS spent,
-        COALESCE(SUM(ABS(p."amountCents")) FILTER (
-          WHERE p."amountCents" < 0 AND p.category = 'Transfer Out'
-        ), 0)::int AS moved
+        COALESCE(SUM(p."amountCents") FILTER (WHERE p."amountCents" > 0), 0)::int AS money_in
       FROM period_txns p
     )
     SELECT
-      (position_at_end.cents - flows.delta)::int AS "liquidCashStartCents",
       position_at_end.cents AS "liquidCashEndCents",
       flows.delta AS "deltaLiquidCashCents",
-      flows.money_in AS "moneyInCents",
-      flows.spent AS "spentCents",
-      flows.moved AS "movedCents",
       CASE WHEN flows.money_in > 0
         THEN ROUND((flows.delta::numeric / flows.money_in) * 100, 1)
         ELSE 0
@@ -187,12 +153,8 @@ async function getCashFlowMetrics(from: Date, to: Date): Promise<CashFlowMetrics
   `)
   const r = rows[0]
   return {
-    liquidCashStartCents: Number(r?.liquidCashStartCents ?? 0),
     liquidCashEndCents: Number(r?.liquidCashEndCents ?? 0),
     deltaLiquidCashCents: Number(r?.deltaLiquidCashCents ?? 0),
-    moneyInCents: Number(r?.moneyInCents ?? 0),
-    spentCents: Number(r?.spentCents ?? 0),
-    movedCents: Number(r?.movedCents ?? 0),
     retentionPercent: Number(r?.retentionPercent ?? 0),
   }
 }
@@ -270,8 +232,7 @@ export default async function DashboardPage({
             <SpendingConcentration categories={[]} totalOutflow={0} />
           </div>
           <MonthlyCashFlow
-            liquidCashStartCents={0} liquidCashEndCents={0} deltaLiquidCashCents={0}
-            moneyInCents={0} spentCents={0} movedCents={0}
+            liquidCashEndCents={0} deltaLiquidCashCents={0}
             retentionPercent={0} trendData={[]}
           />
         </div>
@@ -304,12 +265,8 @@ export default async function DashboardPage({
         />
       </div>
       <MonthlyCashFlow
-        liquidCashStartCents={cashFlow.liquidCashStartCents}
         liquidCashEndCents={cashFlow.liquidCashEndCents}
         deltaLiquidCashCents={cashFlow.deltaLiquidCashCents}
-        moneyInCents={cashFlow.moneyInCents}
-        spentCents={cashFlow.spentCents}
-        movedCents={cashFlow.movedCents}
         retentionPercent={cashFlow.retentionPercent}
         trendData={cashFlowTrend}
       />

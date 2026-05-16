@@ -4,12 +4,8 @@ import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { LiquidCashTrend, type TrendPoint } from './LiquidCashTrend'
 
 interface MonthlyCashFlowProps {
-  liquidCashStartCents: number
   liquidCashEndCents: number
   deltaLiquidCashCents: number
-  moneyInCents: number
-  spentCents: number
-  movedCents: number
   retentionPercent: number
   trendData: TrendPoint[]
 }

@@ -62,7 +62,7 @@
 | 49 | Max range leading zeros fix (All charts) | [x] |
 | 50 | Holdings table CALC-01 cleanup (Investments) | [x] |
 | 51 | Cash Flow section redesign (Dashboard) | [x] |
-| 52 | Slim unused Cash Flow SQL after visualization removal | [ ] |
+| 52 | Slim unused Cash Flow SQL after visualization removal | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -1809,10 +1809,10 @@ Return all three from the query. Component becomes display-only.
 **Scope:** Remove dead SQL/fields down to only what the UI consumes (`retentionPercent`, `liquidCashEndCents`, and `deltaLiquidCashCents` if still used for the negative-delta color affordance), keeping CALC-01 (all math in SQL) and not breaking reconciliation for anything still rendered. Delete unused `getCashFlowSnapshot`. Update `CashFlowMetrics` type, the call site, and tests accordingly.
 
 **Acceptance criteria:**
-- [ ] Only the fields actually rendered by the UI remain in the SQL/type
-- [ ] `getCashFlowSnapshot` removed
-- [ ] CALC-01 preserved (all surviving math stays in SQL)
-- [ ] `npm test` passes
-- [ ] No unused props or imports remain
+- [x] Only the fields actually rendered by the UI remain in the SQL/type
+- [x] `getCashFlowSnapshot` removed
+- [x] CALC-01 preserved (all surviving math stays in SQL)
+- [x] `npm test` passes
+- [x] No unused props or imports remain
 
 **Depends on:** Task 51

@@ -117,15 +117,9 @@ describe('SpendingConcentration', () => {
 })
 
 describe('MonthlyCashFlow', () => {
-  // moneyIn - spent - moved = delta  →  500000 - 200000 - 50000 = 250000
-  // start + delta = end             →  900000 + 250000 = 1150000
   const defaultProps = {
-    liquidCashStartCents: 900000,
     liquidCashEndCents: 1150000,
     deltaLiquidCashCents: 250000,
-    moneyInCents: 500000,
-    spentCents: 200000,
-    movedCents: 50000,
     retentionPercent: 50,
     trendData: [
       { month: 'Jan', liquidCashCents: 900000 },
@@ -146,15 +140,6 @@ describe('MonthlyCashFlow', () => {
     expect(screen.getByText(/of money in as cash/)).toBeInTheDocument()
     // Liquid cash headline = liquidCashEndCents (header value)
     expect(screen.getByText('$11,500')).toBeInTheDocument()
-  })
-
-  it('reconciles: moneyIn - spent - moved === delta', () => {
-    const { moneyInCents, spentCents, movedCents, deltaLiquidCashCents } = defaultProps
-    expect(moneyInCents - spentCents - movedCents).toBe(deltaLiquidCashCents)
-    // and start + delta === end
-    expect(defaultProps.liquidCashStartCents + deltaLiquidCashCents).toBe(
-      defaultProps.liquidCashEndCents
-    )
   })
 
   it('uses tertiary color affordance when delta is negative', () => {
@@ -182,12 +167,11 @@ describe('MonthlyCashFlow', () => {
     expect(screen.queryByText('$11,500')).not.toBeInTheDocument()
   })
 
-  it('renders without crash when moneyInCents is zero (retention 0)', () => {
+  it('renders without crash when retention is zero', () => {
     render(
       <PrivacyProvider>
         <MonthlyCashFlow
           {...defaultProps}
-          moneyInCents={0}
           retentionPercent={0}
           deltaLiquidCashCents={-250000}
         />
@@ -201,12 +185,8 @@ describe('MonthlyCashFlow', () => {
     render(
       <PrivacyProvider>
         <MonthlyCashFlow
-          liquidCashStartCents={0}
           liquidCashEndCents={0}
           deltaLiquidCashCents={0}
-          moneyInCents={0}
-          spentCents={0}
-          movedCents={0}
           retentionPercent={0}
           trendData={[]}
         />
