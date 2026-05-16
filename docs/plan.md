@@ -61,7 +61,8 @@
 | 48 | Top category label fix (Spending) | [x] |
 | 49 | Max range leading zeros fix (All charts) | [x] |
 | 50 | Holdings table CALC-01 cleanup (Investments) | [x] |
-| 51 | Cash Flow section redesign (Dashboard) | [ ] |
+| 51 | Cash Flow section redesign (Dashboard) | [x] |
+| 52 | Slim unused Cash Flow SQL after visualization removal | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
