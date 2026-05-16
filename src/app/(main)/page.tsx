@@ -113,104 +113,87 @@ async function getCashFlowSnapshot(): Promise<{ liquidCashCents: number }> {
 }
 
 interface CashFlowMetrics {
-  incomeCents: number
-  expensesCents: number
-  cashFlowChangeCents: number
-  shortTermDebtCents: number
-  outflowsCents: number
-  surplusPercent: number
+  liquidCashStartCents: number
+  liquidCashEndCents: number
+  deltaLiquidCashCents: number
+  moneyInCents: number
+  spentCents: number
+  movedCents: number
+  retentionPercent: number
 }
 
 /**
- * Cash flow metrics for the selected period.
- * Cash Flow Change = (liquid cash position at period end) - (liquid cash position at period start).
- * Liquid cash position = (Checking + Savings) - CreditCard, reconstructed via transaction rollback.
+ * Cash flow metrics for the selected period — liquid cash only (Checking + Savings).
+ *
+ * Reconciliation guarantee: moneyIn - spent - moved = deltaLiquidCash, because all four
+ * derive from the identical filter (confirmed txns on active Checking+Savings in [from,to]).
+ *   - End position: currentBalance rolled back over confirmed txns dated > to.
+ *   - Delta: signed sum of all confirmed amounts in [from,to].
+ *   - Start: End - Delta (keeps Start/Δ/End mutually consistent by construction).
+ * A "transfer" is a single txn categorized 'Transfer Out' (outflow) / 'Transfer In' (inflow).
  */
 async function getCashFlowMetrics(from: Date, to: Date): Promise<CashFlowMetrics> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<{
-    incomeCents: bigint
-    expensesCents: bigint
-    cashFlowChangeCents: bigint
-    shortTermDebtCents: bigint
-    outflowsCents: bigint
-    surplusPercent: number
+    liquidCashStartCents: bigint
+    liquidCashEndCents: bigint
+    deltaLiquidCashCents: bigint
+    moneyInCents: bigint
+    spentCents: bigint
+    movedCents: bigint
+    retentionPercent: number
   }[]>(Prisma.sql`
     WITH liquid_accounts AS (
-      SELECT id, type, "currentBalanceCents" FROM "Account"
-      WHERE type IN ('Checking', 'Savings', 'CreditCard') AND "isActive" = true
+      SELECT id, "currentBalanceCents" FROM "Account"
+      WHERE type IN ('Checking', 'Savings') AND "isActive" = true
     ),
     position_at_end AS (
-      SELECT SUM(
-        CASE WHEN a.type IN ('Checking', 'Savings')
-          THEN (a."currentBalanceCents" - COALESCE(
-            (SELECT SUM(t."amountCents") FROM "Transaction" t
-             WHERE t."accountId" = a.id AND t.date > ${to} AND t.status = 'confirmed'), 0
-          ))
-          ELSE -(a."currentBalanceCents" - COALESCE(
-            (SELECT SUM(t."amountCents") FROM "Transaction" t
-             WHERE t."accountId" = a.id AND t.date > ${to} AND t.status = 'confirmed'), 0
-          ))
-        END
-      )::int AS cents FROM liquid_accounts a
+      SELECT COALESCE(SUM(
+        a."currentBalanceCents" - COALESCE(
+          (SELECT SUM(t."amountCents") FROM "Transaction" t
+           WHERE t."accountId" = a.id AND t.date > ${to} AND t.status = 'confirmed'), 0
+        )
+      ), 0)::int AS cents FROM liquid_accounts a
     ),
-    position_at_start AS (
-      SELECT SUM(
-        CASE WHEN a.type IN ('Checking', 'Savings')
-          THEN (a."currentBalanceCents" - COALESCE(
-            (SELECT SUM(t."amountCents") FROM "Transaction" t
-             WHERE t."accountId" = a.id AND t.date > ${from} AND t.status = 'confirmed'), 0
-          ))
-          ELSE -(a."currentBalanceCents" - COALESCE(
-            (SELECT SUM(t."amountCents") FROM "Transaction" t
-             WHERE t."accountId" = a.id AND t.date > ${from} AND t.status = 'confirmed'), 0
-          ))
-        END
-      )::int AS cents FROM liquid_accounts a
-    ),
-    income AS (
-      SELECT COALESCE(SUM("amountCents"), 0)::int AS total
-      FROM "Transaction"
-      WHERE status = 'confirmed' AND "amountCents" > 0
-        AND category IN (${incomeList}) AND date >= ${from} AND date <= ${to}
-    ),
-    expenses AS (
-      SELECT COALESCE(SUM(ABS("amountCents")), 0)::int AS total
-      FROM "Transaction"
-      WHERE status = 'confirmed' AND "amountCents" < 0
-        AND category NOT IN (${incomeList}) AND date >= ${from} AND date <= ${to}
-    ),
-    cc_debt_change AS (
-      SELECT COALESCE(-SUM(t."amountCents"), 0)::int AS total
+    period_txns AS (
+      SELECT t."amountCents", t.category
       FROM "Transaction" t
-      INNER JOIN "Account" a ON t."accountId" = a.id
-      WHERE a.type = 'CreditCard' AND a."isActive" = true
-        AND t.status = 'confirmed' AND t.date >= ${from} AND t.date <= ${to}
+      INNER JOIN liquid_accounts a ON t."accountId" = a.id
+      WHERE t.status = 'confirmed' AND t.date >= ${from} AND t.date <= ${to}
     ),
-    cf_change AS (
-      SELECT (COALESCE(position_at_end.cents, 0) - COALESCE(position_at_start.cents, 0))::int AS total
-      FROM position_at_end, position_at_start
+    flows AS (
+      SELECT
+        COALESCE(SUM(p."amountCents"), 0)::int AS delta,
+        COALESCE(SUM(p."amountCents") FILTER (WHERE p."amountCents" > 0), 0)::int AS money_in,
+        COALESCE(SUM(ABS(p."amountCents")) FILTER (
+          WHERE p."amountCents" < 0 AND p.category <> 'Transfer Out'
+        ), 0)::int AS spent,
+        COALESCE(SUM(ABS(p."amountCents")) FILTER (
+          WHERE p."amountCents" < 0 AND p.category = 'Transfer Out'
+        ), 0)::int AS moved
+      FROM period_txns p
     )
     SELECT
-      income.total AS "incomeCents",
-      expenses.total AS "expensesCents",
-      cf_change.total AS "cashFlowChangeCents",
-      GREATEST(cc_debt_change.total, 0)::int AS "shortTermDebtCents",
-      GREATEST(income.total - GREATEST(cc_debt_change.total, 0) - cf_change.total, 0)::int AS "outflowsCents",
-      CASE WHEN income.total > 0
-        THEN ROUND((cf_change.total::numeric / income.total) * 100, 1)
+      (position_at_end.cents - flows.delta)::int AS "liquidCashStartCents",
+      position_at_end.cents AS "liquidCashEndCents",
+      flows.delta AS "deltaLiquidCashCents",
+      flows.money_in AS "moneyInCents",
+      flows.spent AS "spentCents",
+      flows.moved AS "movedCents",
+      CASE WHEN flows.money_in > 0
+        THEN ROUND((flows.delta::numeric / flows.money_in) * 100, 1)
         ELSE 0
-      END AS "surplusPercent"
-    FROM income, expenses, cc_debt_change, cf_change
+      END AS "retentionPercent"
+    FROM position_at_end, flows
   `)
   const r = rows[0]
   return {
-    incomeCents: Number(r?.incomeCents ?? 0),
-    expensesCents: Number(r?.expensesCents ?? 0),
-    cashFlowChangeCents: Number(r?.cashFlowChangeCents ?? 0),
-    shortTermDebtCents: Number(r?.shortTermDebtCents ?? 0),
-    outflowsCents: Number(r?.outflowsCents ?? 0),
-    surplusPercent: Number(r?.surplusPercent ?? 0),
+    liquidCashStartCents: Number(r?.liquidCashStartCents ?? 0),
+    liquidCashEndCents: Number(r?.liquidCashEndCents ?? 0),
+    deltaLiquidCashCents: Number(r?.deltaLiquidCashCents ?? 0),
+    moneyInCents: Number(r?.moneyInCents ?? 0),
+    spentCents: Number(r?.spentCents ?? 0),
+    movedCents: Number(r?.movedCents ?? 0),
+    retentionPercent: Number(r?.retentionPercent ?? 0),
   }
 }
 
@@ -287,9 +270,9 @@ export default async function DashboardPage({
             <SpendingConcentration categories={[]} totalOutflow={0} />
           </div>
           <MonthlyCashFlow
-            liquidCashCents={0} incomeCents={0} expensesCents={0}
-            cashFlowChangeCents={0} shortTermDebtCents={0} outflowsCents={0}
-            surplusPercent={0} trendData={[]}
+            liquidCashStartCents={0} liquidCashEndCents={0} deltaLiquidCashCents={0}
+            moneyInCents={0} spentCents={0} movedCents={0}
+            retentionPercent={0} trendData={[]}
           />
         </div>
       )
@@ -297,12 +280,11 @@ export default async function DashboardPage({
     from = earliest
   }
 
-  const [netWorthRow, spendingData, netWorthHistory, cashFlowSnapshot, cashFlow, cashFlowTrend] =
+  const [netWorthRow, spendingData, netWorthHistory, cashFlow, cashFlowTrend] =
     await Promise.all([
       db.netWorthView.findFirst(),
       getSpendingByCategory(from, to),
       getNetWorthHistory(from, to, range),
-      getCashFlowSnapshot(),
       getCashFlowMetrics(from, to),
       getCashFlowTrend(from, to, range),
     ])
@@ -322,13 +304,13 @@ export default async function DashboardPage({
         />
       </div>
       <MonthlyCashFlow
-        liquidCashCents={cashFlowSnapshot.liquidCashCents}
-        incomeCents={cashFlow.incomeCents}
-        expensesCents={cashFlow.expensesCents}
-        cashFlowChangeCents={cashFlow.cashFlowChangeCents}
-        shortTermDebtCents={cashFlow.shortTermDebtCents}
-        outflowsCents={cashFlow.outflowsCents}
-        surplusPercent={cashFlow.surplusPercent}
+        liquidCashStartCents={cashFlow.liquidCashStartCents}
+        liquidCashEndCents={cashFlow.liquidCashEndCents}
+        deltaLiquidCashCents={cashFlow.deltaLiquidCashCents}
+        moneyInCents={cashFlow.moneyInCents}
+        spentCents={cashFlow.spentCents}
+        movedCents={cashFlow.movedCents}
+        retentionPercent={cashFlow.retentionPercent}
         trendData={cashFlowTrend}
       />
     </div>

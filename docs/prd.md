@@ -28,6 +28,8 @@
 
 **Liquid Cash card:** Sum of all Checking + Savings account balances. Integer cents stored, dollars displayed.
 
+> **Scope note (2026-05-15):** The Cash Flow section's outflow-breakdown visualization (Spent vs Moved / waterfall / cards) was de-scoped by product decision in Task 51. The section now presents only the current Liquid Cash value, the Liquid Cash Retention %, and the liquid-cash trend chart. The Money In / Spent / Moved figures are still computed in SQL and reconcile, but are intentionally not surfaced in the UI. See founder-brief.md FB-13 and the Task 51 note in `docs/plan.md`. (Original spec text below is retained for historical record.)
+
 **Net Worth card:** Total assets − total liabilities (current values). Single number. No chart on Dashboard.
 
 **Investments Value card:** Sum of latest balance snapshots across all Investment + Crypto accounts.

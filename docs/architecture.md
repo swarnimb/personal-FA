@@ -65,9 +65,12 @@ All financial arithmetic lives in PostgreSQL. Zero arithmetic in TypeScript.
 - Spending by category for date range
 - Net worth history per month/year (transaction reconstruction + snapshots, monthly for non-Max, yearly for Max range)
 - Portfolio value history per month/year (BalanceSnapshot sampling, responds to time range)
+- Cash Flow change for the period (`getCashFlowMetrics`)
 - Recent transactions
 
 Views are managed via `prisma migrate dev --create-only` + manual SQL in the migration file. Declared in `schema.prisma` with the `view` keyword. Views are read-only.
+
+**Cash Flow calculation (`getCashFlowMetrics`):** The period Cash Flow change is computed entirely in `$queryRaw`. "Liquid cash" for cash flow is the sum of active **Checking + Savings** balances only — the credit-card balance is **not** folded in (that was the old behavior and was removed; see CONSTRAINT-12 and founder-brief.md FB-13). Outflows are decomposed in SQL into two buckets: **Spent** (real expenses) and **Moved** (transfers out, category `'Transfer Out'`). The headline is Δ liquid cash, and the section exposes a **Liquid Cash Retention** % (= Δ liquid cash ÷ money in). Money In, Spent, and Moved reconcile by construction (Money In − Spent − Moved = Δ liquid cash). The Cash Flow section UI currently surfaces only the Liquid Cash value, the Retention %, and the liquid-cash trend chart — the Spent/Moved breakdown is computed in SQL but not rendered (product decision; see founder-brief.md FB-13).
 
 **CALC-05 — Display conversion:** All amounts stored as integer cents. Division by 100 and `$` formatting happen only at render, never before.
 

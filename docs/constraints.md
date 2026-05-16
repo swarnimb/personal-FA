@@ -146,6 +146,18 @@
 
 ---
 
+### CONSTRAINT-12: Cash Flow figures use liquid cash = active Checking + Savings only
+
+**Decision:** Every Cash Flow number — Δ liquid cash, Money In, Spent, Moved, and Retention — is derived from liquid cash defined as the sum of active Checking + Savings account balances only. Credit-card (or any liability) balance must never be folded into any cash-flow figure.
+
+**What it means in practice:** When computing any Cash Flow metric in `getCashFlowMetrics` (or any future cash-flow query), liquid cash is `SUM` of active Checking + Savings balances only. Never add, subtract, or otherwise mix CreditCard or Loan balances into a cash-flow number — that is a net-worth concern, not a cash-flow concern.
+
+**Who decided and when:** Task 51 / FB-13, builder approved 2026-05-15
+
+**What this closes off:** The original Cash Flow Change formula polluted liquid cash with the credit-card balance, producing a hybrid that was neither cash nor net worth. Reintroducing liability balances into cash-flow math reopens that defect.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -161,3 +173,4 @@
 | 09 | SimpleFin upsert on externalId | Never blind INSERT synced transactions | @data-sync / builder | 2026-04-06 |
 | 10 | Investment history from install date | No pre-install backfill | @cto / builder | 2026-04-06 |
 | 11 | CreditCard/Loan balances stored positive | Negate in all net worth queries | Bug fix / builder | 2026-04-14 |
+| 12 | Cash Flow uses liquid cash = Checking+Savings only | Never fold liability balances into cash-flow figures | Task 51 / FB-13 / builder | 2026-05-15 |

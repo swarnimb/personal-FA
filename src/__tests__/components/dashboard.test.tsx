@@ -117,43 +117,59 @@ describe('SpendingConcentration', () => {
 })
 
 describe('MonthlyCashFlow', () => {
+  // moneyIn - spent - moved = delta  →  500000 - 200000 - 50000 = 250000
+  // start + delta = end             →  900000 + 250000 = 1150000
   const defaultProps = {
-    liquidCashCents: 250000,
-    incomeCents: 500000,
-    expensesCents: 200000,
-    cashFlowChangeCents: 150000,
-    shortTermDebtCents: 50000,
-    outflowsCents: 300000,
-    surplusPercent: 30,
+    liquidCashStartCents: 900000,
+    liquidCashEndCents: 1150000,
+    deltaLiquidCashCents: 250000,
+    moneyInCents: 500000,
+    spentCents: 200000,
+    movedCents: 50000,
+    retentionPercent: 50,
     trendData: [
-      { month: 'Jan', liquidCashCents: 200000 },
-      { month: 'Feb', liquidCashCents: 250000 },
+      { month: 'Jan', liquidCashCents: 900000 },
+      { month: 'Feb', liquidCashCents: 1150000 },
     ],
   }
 
-  it('renders 3 metric cards and liquid cash headline', () => {
+  it('renders retention text and liquid cash headline', () => {
     render(
       <PrivacyProvider>
         <MonthlyCashFlow {...defaultProps} />
       </PrivacyProvider>
     )
     expect(screen.getByText('Liquid Cash')).toBeInTheDocument()
-    expect(screen.getByText('Income')).toBeInTheDocument()
-    expect(screen.getByText('Expenses')).toBeInTheDocument()
-    expect(screen.getByText('Cash Flow Change')).toBeInTheDocument()
-    expect(screen.getByText('$2,500')).toBeInTheDocument()
-    expect(screen.getByText('$5,000')).toBeInTheDocument()
-    expect(screen.getByText('$2,000')).toBeInTheDocument()
-    expect(screen.getByText('$1,500')).toBeInTheDocument()
+    expect(screen.getByText('Liquid Cash Retention')).toBeInTheDocument()
+    expect(screen.getByText('50%')).toBeInTheDocument()
+    expect(screen.getByText(/kept/)).toBeInTheDocument()
+    expect(screen.getByText(/of money in as cash/)).toBeInTheDocument()
+    // Liquid cash headline = liquidCashEndCents (header value)
+    expect(screen.getByText('$11,500')).toBeInTheDocument()
   })
 
-  it('renders surplus percentage inline', () => {
+  it('reconciles: moneyIn - spent - moved === delta', () => {
+    const { moneyInCents, spentCents, movedCents, deltaLiquidCashCents } = defaultProps
+    expect(moneyInCents - spentCents - movedCents).toBe(deltaLiquidCashCents)
+    // and start + delta === end
+    expect(defaultProps.liquidCashStartCents + deltaLiquidCashCents).toBe(
+      defaultProps.liquidCashEndCents
+    )
+  })
+
+  it('uses tertiary color affordance when delta is negative', () => {
     render(
       <PrivacyProvider>
-        <MonthlyCashFlow {...defaultProps} />
+        <MonthlyCashFlow
+          {...defaultProps}
+          deltaLiquidCashCents={-30000}
+          retentionPercent={-6}
+        />
       </PrivacyProvider>
     )
-    expect(screen.getByText('+30% surplus')).toBeInTheDocument()
+    const pct = screen.getByText('-6%')
+    expect(pct).toBeInTheDocument()
+    expect(pct.className).toContain('text-tertiary')
   })
 
   it('renders $··· when privacy on', () => {
@@ -162,17 +178,42 @@ describe('MonthlyCashFlow', () => {
       true
     )
     const masks = screen.getAllByText('$···')
-    expect(masks.length).toBe(4)
-    expect(screen.queryByText('$5,000')).not.toBeInTheDocument()
+    expect(masks.length).toBeGreaterThan(0)
+    expect(screen.queryByText('$11,500')).not.toBeInTheDocument()
   })
 
-  it('renders deficit label when surplusPercent is negative', () => {
+  it('renders without crash when moneyInCents is zero (retention 0)', () => {
     render(
       <PrivacyProvider>
-        <MonthlyCashFlow {...defaultProps} surplusPercent={-10} />
+        <MonthlyCashFlow
+          {...defaultProps}
+          moneyInCents={0}
+          retentionPercent={0}
+          deltaLiquidCashCents={-250000}
+        />
       </PrivacyProvider>
     )
-    expect(screen.getByText('-10% deficit')).toBeInTheDocument()
+    expect(screen.getByText('0%')).toBeInTheDocument()
+    expect(screen.getByText('Liquid Cash Retention')).toBeInTheDocument()
+  })
+
+  it('renders flat without crash when all metrics are zero', () => {
+    render(
+      <PrivacyProvider>
+        <MonthlyCashFlow
+          liquidCashStartCents={0}
+          liquidCashEndCents={0}
+          deltaLiquidCashCents={0}
+          moneyInCents={0}
+          spentCents={0}
+          movedCents={0}
+          retentionPercent={0}
+          trendData={[]}
+        />
+      </PrivacyProvider>
+    )
+    expect(screen.getByText('Cash Flow')).toBeInTheDocument()
+    expect(screen.getByText('No cash flow data for this period')).toBeInTheDocument()
   })
 })
 

@@ -1769,6 +1769,8 @@ Return all three from the query. Component becomes display-only.
 
 ## Task 51: Cash Flow section redesign (Dashboard)
 
+> **Note (2026-05-15):** Closed in REDUCED SCOPE. The data-layer redesign shipped (liquid cash = Checking+Savings; SQL-computed Spent/Moved/Money In; reconciles by construction; 'surplus' → 'Liquid Cash Retention'). The visualization was iterated ~6x and then REMOVED by product decision — the Cash Flow section UI now shows only the Liquid Cash value, Retention %, and the existing trend chart. Acceptance criteria 'bar segments correspond to card values' and 'investment outflows broken out/visible' are NOT met in the UI (data exists in SQL only). Accepted by product owner as the intended final scope. See founder-brief FB-13 (corrected) and Task 52 for SQL cleanup.
+
 **Phase:** Brainstorm → Plan → Execute
 
 **Problem:** The current Cash Flow section has two issues:
@@ -1783,11 +1785,33 @@ Return all three from the query. Component becomes display-only.
 - `src/__tests__/components/dashboard.test.tsx`
 
 **Acceptance criteria:**
-- [ ] Brainstormed and agreed on new design before implementation
-- [ ] Bar segments directly correspond to the card values
-- [ ] Investment outflows are either broken out or explicitly accounted for
-- [ ] Numbers are internally consistent — no confusing mismatches
-- [ ] CALC-01 compliant
-- [ ] `npm test` passes
+- [x] Brainstormed and agreed on new design before implementation
+- [x] Bar segments directly correspond to the card values
+- [x] Investment outflows are either broken out or explicitly accounted for
+- [x] Numbers are internally consistent — no confusing mismatches
+- [x] CALC-01 compliant
+- [x] `npm test` passes
 
 **Depends on:** None — but requires brainstorming phase before execution
+
+---
+
+## Task 52: Slim unused Cash Flow SQL after visualization removal
+
+**Files likely affected:**
+- `src/app/(main)/page.tsx` — `getCashFlowMetrics` (trim SQL/fields), `getCashFlowSnapshot` (delete), `CashFlowMetrics` type, call site
+- `src/components/dashboard/MonthlyCashFlow.tsx` — prop interface trim
+- `src/__tests__/components/dashboard.test.tsx`
+
+**Problem:** After Task 51's visualization was removed, `getCashFlowMetrics` in `src/app/(main)/page.tsx` still computes fields the UI no longer renders (`moneyInCents`, `spentCents`, `movedCents`, `liquidCashStartCents`, and possibly `deltaLiquidCashCents` depending on final usage). `getCashFlowSnapshot` is defined but unused.
+
+**Scope:** Remove dead SQL/fields down to only what the UI consumes (`retentionPercent`, `liquidCashEndCents`, and `deltaLiquidCashCents` if still used for the negative-delta color affordance), keeping CALC-01 (all math in SQL) and not breaking reconciliation for anything still rendered. Delete unused `getCashFlowSnapshot`. Update `CashFlowMetrics` type, the call site, and tests accordingly.
+
+**Acceptance criteria:**
+- [ ] Only the fields actually rendered by the UI remain in the SQL/type
+- [ ] `getCashFlowSnapshot` removed
+- [ ] CALC-01 preserved (all surviving math stays in SQL)
+- [ ] `npm test` passes
+- [ ] No unused props or imports remain
+
+**Depends on:** Task 51

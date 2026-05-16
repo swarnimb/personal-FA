@@ -187,3 +187,21 @@
 **Check before approving:** If you ever add a new account type that represents a liability (e.g., Mortgage), it must be added to the `('CreditCard', 'Loan')` list in every net worth query and in the `v_net_worth` view — or the same inflation bug will recur for that type.
 
 **What this closes off:** Switching to negative-stored liabilities (e.g., storing -184722 instead of 184722) would require migrating all existing CreditCard/Loan balances, updating the SimpleFin sync to negate on ingest, and removing all the `CASE WHEN` negation logic. Not worth doing now, but would simplify queries if done in a future cleanup pass.
+
+---
+
+## FB-13: Cash Flow Section Redesigned Around Liquid-Cash Reconciliation
+
+**Date:** 2026-05-15
+**Architecture section:** Financial Calculations (CALC-01), Dashboard — Cash Flow section
+**Constraint:** CALC-01
+
+**Decided:** The dashboard Cash Flow *data layer* was rebuilt. "Liquid cash" is now strictly Checking + Savings (matches the `v_liquid_cash` view); credit-card balance is no longer folded in. The period change is computed in PostgreSQL via `$queryRaw` (CALC-01) and reconciles by construction: Money In − Spent − Moved = Δ Liquid Cash. Outflows are split into two SQL buckets — "Spent" (real expenses, gone) and "Moved" (transfers out — money still yours elsewhere: brokerage / crypto / debt). A 2-bucket split (not 3) was chosen because a transfer is a single uncategorized transaction (category `Transfer Out`) with no destination link, so Invested vs. Debt-paid cannot be distinguished without adding categories — deferred. The old "surplus %" metric was renamed "Liquid Cash Retention" (= Δ Liquid Cash ÷ Money In) because "surplus" wrongly implied leftover-after-expenses.
+
+**Correction to the original record:** The original FB-13 described this section shipping with a horizontal waterfall chart. **That is not what shipped.** The visualization was iterated roughly six times — Recharts vertical waterfall → horizontal waterfall → hand-built div waterfall → 3-bar layout → top-legend left-aligned bars → 4-number strip — and ultimately **removed entirely by product decision**: none of the visual treatments earned their place in the layout. The Cash Flow section UI now shows only the current Liquid Cash value, the Liquid Cash Retention % caption, and the pre-existing liquid-cash trend area chart (extracted into `LiquidCashTrend.tsx`). The Money In / Spent / Moved breakdown is computed in SQL but is **not surfaced anywhere in the UI**.
+
+**Means for your product:** The data behind Cash Flow is now correct and honest — liquid cash means only spendable Checking + Savings, and the period math always adds up. But the original goal of Task 51 — making investment "Moved" money *visually* distinct from real "Spent" money — was **not delivered in the UI**. You cannot currently see, on the dashboard, how much cash went to investing versus real spending. The data exists and is correct in the database; the product decision was that no visualization of it belonged in this section. The Cash Flow section reads as: how much spendable cash you have now, what fraction of money in you retained, and the trend over time.
+
+**Check before approving:** The Money In / Spent / Moved figures are computed in SQL but rendered nowhere. If you later want that breakdown visible, a new visualization (and likely a fresh design pass) is required — and "Moved" still lumps brokerage, crypto, and debt payoff together (transfers would need categorizing to split Invested vs. Debt-paid). A negative starting liquid-cash balance is expected and valid (it still reconciles correctly).
+
+**What this closes off:** Nothing is permanently closed off — the reconciliation math (Money In − Spent − Moved = Δ Liquid Cash) holds for any number of outflow buckets if a visualization is reintroduced later. However, because the breakdown is no longer rendered, several SQL fields and the `getCashFlowSnapshot` function are now dead weight; trimming them is tracked as Task 52.
