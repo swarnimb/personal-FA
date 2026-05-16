@@ -158,6 +158,18 @@
 
 ---
 
+### CONSTRAINT-13: Dashboard financial query functions live in a shared importable module
+
+**Decision:** All financial query functions (`getCashFlowMetrics`, `getCashFlowTrend`, `getNetWorthHistory`, `getSpendingByCategory`, and any future CALC-01 query) live in a shared importable module under `src/lib/` — never defined module-private inside a page/route server component.
+
+**What it means in practice:** When adding or moving a function that runs financial SQL, place it in `src/lib/dashboard-queries.ts` (or a sibling `src/lib/*-queries.ts`) and import it into the page. Never inline a `$queryRaw` financial function inside `src/app/**/page.tsx`. Every such function must be importable so it can be covered by a `*.integration.test.ts` suite against `amibroke_test`.
+
+**Who decided and when:** QA finding 2026-05-15 (CALC-01 had zero executing coverage because functions were page-private); extraction approach builder-ratified 2026-05-15. Implemented by Task 53.
+
+**What this closes off:** Reverting to page-private query functions removes the test seam and reopens the exact coverage gap QA flagged. Any future inline financial query is a CONSTRAINT-13 violation.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -174,3 +186,4 @@
 | 10 | Investment history from install date | No pre-install backfill | @cto / builder | 2026-04-06 |
 | 11 | CreditCard/Loan balances stored positive | Negate in all net worth queries | Bug fix / builder | 2026-04-14 |
 | 12 | Cash Flow uses liquid cash = Checking+Savings only | Never fold liability balances into cash-flow figures | Task 51 / FB-13 / builder | 2026-05-15 |
+| 13 | Financial query fns in shared `src/lib/` module | Never page-private; must be integration-testable | QA finding / builder | 2026-05-15 |

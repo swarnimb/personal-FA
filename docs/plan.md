@@ -63,6 +63,8 @@
 | 50 | Holdings table CALC-01 cleanup (Investments) | [x] |
 | 51 | Cash Flow section redesign (Dashboard) | [x] |
 | 52 | Slim unused Cash Flow SQL after visualization removal | [x] |
+| 53 | Extract dashboard data-layer queries into a testable module | [ ] |
+| 54 | Add CALC-01 integration test suite against amibroke_test | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -1816,3 +1818,73 @@ Return all three from the query. Component becomes display-only.
 - [x] No unused props or imports remain
 
 **Depends on:** Task 51
+
+---
+
+## Task 53: Extract dashboard data-layer queries into a testable module
+
+> Source: `docs/qa-report.md` (2026-05-15) High-Priority finding. Not a PRD feature —
+> QA-remediation debt. Extraction approach ratified by builder 2026-05-15 (no `@cto` consult).
+
+**Problem:** `getCashFlowMetrics`, `getCashFlowTrend`, and `getNetWorthHistory` are
+module-private to `src/app/(main)/page.tsx` with no import seam, so the financial SQL
+(CALC-01) cannot be integration-tested. This is the root of the QA coverage gap.
+
+**Files:**
+- `src/lib/dashboard-queries.ts` — create. Move verbatim: `getCashFlowMetrics`,
+  `getCashFlowTrend`, `getNetWorthHistory`, `getSpendingByCategory`, and the
+  `CashFlowMetrics` / `TrendPoint` types. No logic change.
+- `src/app/(main)/page.tsx` — modify. Import from `@/lib/dashboard-queries`; delete the
+  inline definitions; keep `DashboardPage` and its render unchanged.
+
+**Acceptance criteria:**
+- [ ] Functions moved verbatim — zero behavior change; SQL bodies byte-identical (CALC-01: no math relocated into TS)
+- [ ] `page.tsx` imports from `@/lib/dashboard-queries`; no query logic remains inline
+- [ ] Unit suite still 160/160; `tsc` clean for touched files (pre-existing `spending-metrics.test.tsx` error excluded — out of scope)
+- [ ] Browser smoke: Dashboard renders identical figures (Net Worth, Cash Flow retention %, Liquid Cash, trend) at both YTD and Max ranges
+- [ ] No unused imports remain; no file exceeds the CQ-02 limit (services < 300 lines)
+
+**Tests required:**
+- Existing `dashboard.test.tsx` continues to pass unchanged (presentational coverage unaffected)
+- No new unit tests in this task — coverage is added in Task 54
+
+**Depends on:** Task 52
+**Specialist:** none — pure refactor, `@dev`
+
+---
+
+## Task 54: Add CALC-01 integration test suite against amibroke_test
+
+> Source: `docs/qa-report.md` (2026-05-15) High-Priority finding. Closes the
+> "financial SQL has zero executing coverage" gap.
+
+**Problem:** Every unit test mocks `@/lib/db`; no test executes real financial SQL. For a
+finance tool whose entire correctness model is "all money math in PostgreSQL" (CALC-01),
+the core guarantee is unverified by automation.
+
+**Files:**
+- `src/__tests__/integration/dashboard-queries.integration.test.ts` — create
+- `vitest.integration.config.ts` — create (integration project that does NOT mock
+  `@/lib/db`; the default unit config globally mocks it — keep them separate per TS-03)
+- `package.json` — modify (add `test:integration` script; `test` stays unit-only)
+- `docs/testing-setup.md` — modify (fix stale seed section: real seed is
+  `prisma/seed-demo.ts`, not `prisma/seed.ts`; correct `amibroke_test` setup/reset commands)
+
+**Acceptance criteria:**
+- [ ] Tests run against `amibroke_test` DB seeded by `prisma/seed-demo.ts` — never the production DB; test DB URL from env, not hardcoded (SEC-01)
+- [ ] `getCashFlowMetrics`: happy — seeded data yields a known retention % and `liquidCashEndCents`; edge — zero `money_in` ⇒ retention `0` (TS-01)
+- [ ] `getNetWorthHistory`: asserts CreditCard/Loan balances are negated in the net worth total (CONSTRAINT-11)
+- [ ] Liquid cash = active Checking + Savings only; inactive accounts and CreditCard excluded (CONSTRAINT-12)
+- [ ] Transaction-rollback reconstruction (`position_at_end`) verified against a known seeded transaction series
+- [ ] TS-03: DB-dependent tests isolated in `*.integration.test.ts` with a separate run target; `npm test` (unit) stays 160/160 and mock-only
+- [ ] `docs/testing-setup.md` seed/reset instructions match reality
+- [ ] No silent failures — a DB connection error fails loudly with context (EH-02), it does not skip the suite green
+
+**Tests required:**
+- `describe getCashFlowMetrics` → `happy: known seed ⇒ expected retention% + liquidCashEnd`
+- `describe getCashFlowMetrics` → `error/edge: zero money_in ⇒ retention 0`
+- `describe getNetWorthHistory` → `CONSTRAINT-11: CreditCard/Loan negated`
+- `describe liquidCash` → `CONSTRAINT-12: inactive + CreditCard excluded`
+
+**Depends on:** Task 53
+**Specialist:** `@write-tests` — manifest on-demand skill for test authoring

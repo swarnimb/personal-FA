@@ -45,6 +45,7 @@ Thumbs.db
 # Verification screenshots
 task4-base-verify.png
 task5-layout-verify.png
+qa-task52-dashboard-ytd.png
 
 # Security audit (local only)
 codex-security-audit.md

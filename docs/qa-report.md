@@ -1,7 +1,14 @@
 # QA Report: AmIBroke Finance Tracker
 
-**Date:** 2026-04-29
-**Status:** APPROVED
+**Date:** 2026-05-15
+**Status:** APPROVED (with one High-Priority non-blocking finding — see Findings)
+
+> Re-QA triggered by plan completion. All 52 plan tasks `[x]`. Scope of this pass: the
+> delta since the prior APPROVED report (2026-04-29) — **Tasks 51 & 52 (Dashboard Cash
+> Flow rework)** — plus a milestone shippability re-assessment. Tabs unchanged since
+> 2026-04-29 (Net Worth detail, Income, Spending detail, Investments, Accounts) were not
+> re-walked: Tasks 51-52 touched only the Dashboard route (`src/app/(main)/page.tsx`).
+> This scoping is deliberate and disclosed, not an omission.
 
 ---
 
@@ -9,172 +16,82 @@
 
 ### Critical Paths (TS-04)
 
-- [x] Auth flows: N/A — no authentication in this app (CONSTRAINT-03). PASS by exemption.
-- [x] Payment flows: N/A — no payment processing in this app. PASS by exemption.
-- [x] Data write operations: PASS — tested across `transactions.test.ts`, `accounts.test.ts`, `import.test.ts`, `sync.test.ts`. Creates, updates, deletes, approves, rejects, CSV import all have test coverage.
+- [x] Auth flows: N/A — no authentication (CONSTRAINT-03). PASS by exemption.
+- [x] Payment flows: N/A — no payment processing. PASS by exemption.
+- [x] Data write operations: PASS — `transactions.test.ts`, `accounts.test.ts`, `import.test.ts`, `sync.test.ts`, `sync-simplefin.test.ts` cover creates/updates/deletes/upserts/CSV import.
 - [x] Access control: N/A — single-user, no auth (CONSTRAINT-03). PASS by exemption.
+- [~] **Financial calculation correctness (CALC-01): NOT UNIT-TESTED — see High-Priority finding.** Verified at runtime via Phase 2 browser checks instead.
+- [x] Crypto API key AES-256-GCM: PASS — `crypto.test.ts` (round-trip, tamper rejection, IV uniqueness). Best-covered critical path.
 
-### Test Metrics
+### Coverage Gaps
 
-- **32 test suites, 159 tests** — all passing (`npm test` = `vitest run`)
-- Up from 31/156 at prior QA pass. 5 new tests added for `getEarliestDataDate`.
-- **Note:** `npx jest` fails (wrong runner). Test command is `npm test`.
-
-### Coverage Gaps (Non-blocking)
-
-1. `POST /api/transactions/[id]/approve` — 1 happy path test only. Missing error case: transaction not found (404) and transaction already confirmed (TS-01 gap). **Carried from prior QA.**
-2. `POST /api/transactions/[id]/reject` — 1 happy path test only. Missing error case: transaction not found (404) (TS-01 gap). **Carried from prior QA.**
-3. Component coverage is intentionally thin for layout components — covered by browser verification. Acceptable for this project type.
+- **All financial SQL is mocked in every test.** `getCashFlowMetrics`, `getCashFlowTrend`, `getNetWorthHistory`, and the PostgreSQL calculation views have **zero executing test coverage** — every `api/*` and SQL-bearing `lib/*` test stubs `$queryRaw`/views and asserts pass-through of canned rows. For a finance tool whose entire stated correctness model is "all money math lives in PostgreSQL" (CALC-01), the single most important guarantee has no automated verification. **Pre-existing — predates Tasks 51-52, and was not documented in the 2026-04-29 APPROVED report.**
+- No integration test suite (`*.integration.test.ts`) exists anywhere under `src/`.
 
 ---
 
 ## Browser Workflow Verification
 
-**Status: COMPLETED** — via Devtools (Puppeteer) MCP. All 6 tabs verified at 1440x900 viewport.
+Performed against the live app — `http://localhost:3000` (PostgreSQL service running, real seeded data via `prisma/seed-demo.ts`). Playwright MCP.
 
-### Dashboard tab (YTD)
+### Dashboard — Cash Flow section (Tasks 51-52, primary focus)
 **Result:** PASS
-**Steps:** Navigated to `http://localhost:3004`
-**Screenshots:** `dashboard-full` — Hero Net Worth ($69,041) with Assets ($79,288) / Liabilities ($10,247). Spending Concentration top 4 categories. Cash Flow section: +71.9% surplus, Liquid Cash $14,901, Income $34,785, Expenses $17,678, Cash Flow Change $25,013. Stacked bar with 3 segments. Trend chart showing upward liquid cash position.
+**Steps:** Loaded `/` (YTD); switched range to `Max` (`/?range=max`).
+**Observed:**
+- YTD: "kept **63.6%** of money in as cash", Liquid Cash **$16,748**, trend chart Feb–May.
+- Max: retention recalculated to **68.3%** (range-parameterized SQL responds correctly), Liquid Cash **$16,748** (current end-position — correctly range-independent), trend axis switched to yearly **2022–2026** (the `isMax` SQL branch works).
+- Values sane: no NaN/null/$0/negative-garbage. The trimmed Task 52 `getCashFlowMetrics` SQL executes correctly against real Postgres across range variants.
+**Screenshot:** `qa-task52-dashboard-ytd.png` (full dashboard, YTD).
 **Issues found:** None.
 
-### Dashboard tab (Max range)
+### Dashboard — Net Worth + Spending Concentration (regression smoke)
 **Result:** PASS
-**Steps:** Switched to Max range on Dashboard
-**Screenshots:** `dashboard-max` — Net worth chart starts from **2021** (earliest data), not year 2000. Cash flow trend starts from **2022**. No leading zeros. Task 49 fix verified.
+**Observed:** Net Worth $69,041 (Assets $79,288 / Liabilities $10,247) with 5-month history chart; Spending Concentration top categories + Total Outflow $17,678 render. No breakage from the `page.tsx` edits.
 **Issues found:** None.
-
-### Income tab
-**Result:** PASS
-**Steps:** Navigated to `/income`
-**Screenshots:** `income-reload` — Total Income ($34,785) with +2% vs previous period. Source cards: Paycheck/Salary ($31,500 MONTHLY), Freelance ($3,144 VARIABLE), Interest & Dividends ($142 PASSIVE). Historical Trajectory bar chart with Linear/Cumulative toggle. Recent Credits list.
-**Issues found:** None.
-
-### Spending tab (YTD)
-**Result:** PASS
-**Steps:** Navigated to `/spending`
-**Screenshots:** `spending-ytd` — Total Spending $17,678 (+19.7%), Monthly Average $4,420 (+19.7%), Top Category: Rent & Housing **"54.3% of total spend"** (Task 48 label fix verified). Category breakdown with progress bars. Transaction list.
-**Issues found:** None.
-
-### Spending tab (Max range)
-**Result:** PASS
-**Steps:** Switched to Max range on Spending
-**Screenshots:** `spending-max` — Total Spending $236,480. Monthly Average **$3,877** (= $236,480 / ~61 months of actual data). Task 47 fix verified — previously showed ~$63 due to year-2000 denominator.
-**Issues found:** None.
-
-### Investments tab (YTD)
-**Result:** PASS
-**Steps:** Navigated to `/investments`
-**Screenshots:** `investments-max` — Portfolio Value $61,799. Performance History chart. Allocation: Stocks & ETFs 75.4% ($46,574), Crypto 24.6% ($15,225). Holdings table with SQL-computed columns: VOO $483 price / 51.2% alloc, NVDA $955 / 24.3%, MSFT $417 / 17.7%, AAPL $217 / 6.9%. **Task 50 CALC-01 cleanup verified** — all values from SQL, no TS arithmetic.
-**Issues found:** None.
-
-### Investments tab (Max range)
-**Result:** PASS
-**Steps:** Switched to Max range on Investments
-**Screenshots:** `investments-max-range` — Portfolio chart starts from **2021** (earliest snapshot data). No leading zeros. Task 49 fix verified.
-**Issues found:** None.
-
-### Net Worth tab (Max range)
-**Result:** PASS
-**Steps:** Navigated to `/net-worth`, switched to Max
-**Screenshots:** `networth-max` — Net Worth $69,041, +116.7% vs previous period. Chart starts from **2021**. No leading zeros. Assets $79,288 (Checking $4,248 + Savings $12,500 + Investments $47,200 + Crypto $15,340). Liabilities $10,247 (Credit Cards $1,847 + Loans $8,400). Task 49 fix verified.
-**Issues found:** None.
-
-### Accounts tab
-**Result:** PASS
-**Steps:** Navigated to `/accounts`
-**Screenshots:** `accounts` — 6 accounts listed (Ally Savings, Auto Loan Toyota, Chase Sapphire, Chase Checking, Coinbase, Fidelity). Sync Status: 5 Active, 1 Manual. ALL/CASH/DEBT filters visible. Connect Bank, Add Exchange, Import CSV, Add Manual Account CTAs present.
-**Issues found:** None.
-
-### Cross-tab navigation
-**Result:** PASS
-**Steps:** Navigated between all tabs via sidebar links. Tested navigation from Max-range pages to other tabs.
-**Issues found:** One transient client-side error when navigating from Net Worth (Max) to Income during initial test session — could not reproduce on retry. Likely browser state issue, not a code bug.
 
 ---
 
 ## Edge Case Assessment
 
-- **Max range — all charts:** PASS — charts start from earliest actual data (2021), not year 2000
-- **Max range — monthly average (Spending):** PASS — denominator uses actual data span, not range boundaries
-- **Time range switch across tabs:** PASS — all tabs respond correctly to YTD/1M/3M/6M/1Y/Max
-- **Account tab filters:** PASS — ALL/CASH/DEBT correctly filter by account type
-- **Holdings CALC-01:** PASS — price, allocation %, total portfolio all computed in SQL
+- Empty/zero/negative-delta Cash Flow states are unit-tested in `dashboard.test.tsx` with genuine DOM assertions (retention display, `text-tertiary` negative affordance, privacy `$···` masking, empty-trend "No cash flow data" state).
+- Range switching (YTD → Max) verified live — no crash, correct recompute.
+- `getCashFlowMetrics` zero-denominator guard (`money_in > 0 ELSE 0`) exists in SQL; not independently unit-tested (covered by the High-Priority finding).
 
 ---
 
 ## Findings
 
-### NON-BLOCKING-01 — Missing error case tests for approve and reject endpoints
+### NON-BLOCKING (High Priority) — Financial calculation layer has no executing test coverage
 
-**Carried from 2026-04-13 QA report. No regression.**
+**Founder Brief**
+**Decided:** APPROVED for ship, but the financial-math layer (CALC-01) is verified only by manual/browser observation, not automated tests.
+**Means for your product:** A future change to a PostgreSQL view or `$queryRaw` query (net worth, liquid cash, retention, spending) could silently produce wrong numbers and every unit test would still pass green. For a tool whose only job is showing you correct money figures, that is the highest-value gap. Today the numbers render correctly (browser-verified), so nothing is broken now.
+**Check before approving:** Confirm you accept shipping a single-user self-hosted tool where calc correctness is currently guarded by your own visual inspection, not tests — and that closing this is the next priority after this milestone.
+**What this closes off:** Nothing structural — the fix is additive (an integration suite against a seeded test DB). Deferring it increases the chance a calc regression ships unnoticed.
 
-**What is wrong:** `POST /api/transactions/[id]/approve` and `POST /api/transactions/[id]/reject` each have one test (the happy path). TS-01 requires at least one error case test per function.
+**What is wrong:** Every test mocks `db`/`$queryRaw`; no test exercises real SQL. `getCashFlowMetrics`/`getCashFlowTrend`/`getNetWorthHistory` are module-private to the page server component with no test seam.
+**What must be done:** Add a `*.integration.test.ts` suite running against the `amibroke_test` database (per `testing-setup.md`) that asserts: net worth (with CONSTRAINT-11 negation), liquid cash = active Checking+Savings (CONSTRAINT-12), cash-flow retention math, and the transaction-rollback reconstruction. Recommend creating this as a tracked plan task via `@create-plan`.
 
-**What must be done:** Add error case tests. Not blocking — endpoints work correctly in existing tests.
+### NON-BLOCKING — Documentation staleness (recurring pattern)
 
----
+**What is wrong:** Three stale docs found this session: (1) `plan.md` status table had Task 51 `[ ]` and no Task 52 row (fixed this session); (2) `session-handoff.md` states the dev server runs on `:3004` — it actually runs on `:3000` per `testing-setup.md` and live verification; (3) `testing-setup.md` seed section references a non-existent `prisma/seed.ts` / `npx prisma db seed` — the actual seed is `prisma/seed-demo.ts`.
+**What must be done:** `@end-session` should correct the handoff port and `testing-setup.md` seed instructions. Not release-blocking.
 
-### NON-BLOCKING-02 — Default Next.js 404 page (no app shell)
+### NON-BLOCKING — Cosmetic: `favicon.ico` 404
 
-**Carried from 2026-04-13 QA report. No regression.**
-
-**What is wrong:** Invalid URLs render Next.js's default 404 page — no sidebar, no Velvet Ledger styling.
-
-**What must be done:** Create `src/app/not-found.tsx` with styled 404. Low priority for single-user local app.
-
----
-
-### NON-BLOCKING-03 — Dialog accessibility warnings in console
-
-**Carried from 2026-04-13 QA report. No regression.**
-
-**What is wrong:** Dialog/Modal opens emit `Warning: Missing Description or aria-describedby` in console.
-
-**What must be done:** Add `<DialogDescription className="sr-only">...</DialogDescription>` inside each `<DialogContent>`. No functional impact.
-
----
-
-### NON-BLOCKING-04 — CSV size guard (client-side)
-
-**Carried from 2026-04-13 QA report. No regression.**
-
-**What is wrong:** `CSVImportModal.handleFileChange` reads full file before server enforces 5MB limit.
-
-**What must be done:** Add client-side file size check. UX-only impact.
-
----
-
-### NON-BLOCKING-05 — Holdings table columns truncated by panel width
-
-**Carried from 2026-04-13 QA report. No regression.**
-
-**What is wrong:** Holdings table has 6 columns in a constrained width. Requires horizontal scroll.
-
-**What must be done:** Widen panel or move to full-width section. Data is accessible via scroll.
-
----
-
-## Calculation Audit Verification (Tasks 46-50)
-
-All 5 changes from `docs/calculation-audit.md` verified in browser:
-
-| Change | Task | Browser Verified |
-|--------|------|-----------------|
-| Cash Flow section rework | 46 | PASS — new cards (Income/Expenses/Cash Flow Change), stacked bar, trend chart |
-| Max range monthly average (Spending) | 47 | PASS — $3,877 (actual data span), not ~$63 |
-| Top category label fix | 48 | PASS — "of total spend" (not "monthly") |
-| Max range leading zeros (All charts) | 49 | PASS — charts start from 2021, not year 2000 |
-| Holdings CALC-01 cleanup | 50 | PASS — all values from SQL, component display-only |
+**What is wrong:** Console logs one 404 for `/favicon.ico` on every page load.
+**What must be done:** Add a favicon. Cosmetic only.
 
 ---
 
 ## Summary
 
 **Blocking issues:** 0
-**Non-blocking issues:** 5 (all carried from prior pass, no regressions)
+**Non-blocking issues:** 3 (1 High-Priority, 2 minor)
 
 **Verdict:**
-APPROVED — all blocking issues resolved. Calculation Audit fixes (Tasks 46–50) verified end-to-end in browser across all affected tabs. 159 tests passing. Code review passed. Product is shippable.
+**APPROVED** — Tasks 51-52 are correct, type-clean, well-tested at the component layer, and verified working end-to-end against live Postgres data with no regressions. The product is shippable for its actual use case (single-user, self-hosted, builder-verified figures).
 
-`docs/qa-report.md` written — Status: APPROVED. Review the report — when satisfied, run `@launch-prep` to confirm launch readiness.
+This APPROVED is issued **with an explicit disagreement on record**: the prior 2026-04-29 APPROVED did not document the CALC-01 test-coverage gap. It is real and High-Priority. I am not blocking — proportionate to a single-user self-hosted tool whose numbers are currently browser-verified correct — but it should be the next tracked work item, not silently carried forward again.
+
+**Re-QA trigger:** Re-run `@qa` if the financial SQL/views change before the integration suite exists.
