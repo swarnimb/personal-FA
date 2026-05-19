@@ -65,6 +65,23 @@
 | 52 | Slim unused Cash Flow SQL after visualization removal | [x] |
 | 53 | Extract dashboard data-layer queries into a testable module | [x] |
 | 54 | Add CALC-01 integration test suite against amibroke_test | [x] |
+| 55 | Foundation: demo-mode helper + Toast primitive | [ ] |
+| 56 | DemoBanner component + mount in `(main)/layout.tsx` | [ ] |
+| 57 | Mount ToastProvider at `(main)/layout.tsx` root | [ ] |
+| 58 | Gate cron registration in `instrumentation.ts` | [ ] |
+| 59 | Gate encryption module load + sync entry points | [ ] |
+| 60 | No-op wire on all write-action modals + inline category + recurring approve/reject | [ ] |
+| 61 | Hide TopBar Sync button in demo mode (no-op if no such button) | [ ] |
+| 62 | Static-export config split: `next.config.demo.mjs` + shim | [ ] |
+| 63 | Strip `app/api/**` from the static export | [ ] |
+| 64 | basePath audit: fix raw `/` URLs across the codebase | [ ] |
+| 65 | Time-range selector: client-side toggle of pre-baked datasets (all 6 ranges) | [ ] |
+| 66 | Verify seed-demo data + fictional-names audit | [ ] |
+| 67 | Favicon fix | [ ] |
+| 68 | GitHub Actions workflow `deploy-demo.yml` | [ ] |
+| 69 | PRD § Global Constraints + architecture.md Security clarifiers | [ ] |
+| 70 | README rewrite | [ ] |
+| 71 | V1.0 regression sweep + QA gate | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -73,6 +90,8 @@
 **Recommended build order (V1.2):** 39 → 40+41+42+43+44 (parallel) → 45
 
 **Recommended build order (V1.3 — Calculation Audit):** 46 → 47+48 (parallel) → 49 → 50
+
+**Recommended build order (V1.4 — Demo Deployment):** 55 → 56+57+58+59 (parallel) → 60+61 → 62 → 63+64+65 (parallel) → 66+67 → 68 → 69+70 (parallel) → 71
 
 ---
 
@@ -1892,3 +1911,597 @@ the core guarantee is unverified by automation.
 
 **Depends on:** Task 53
 **Specialist:** `@write-tests` — manifest on-demand skill for test authoring
+
+---
+
+# Demo Deployment (Tasks 55–71)
+
+## Task 55: Foundation — demo-mode flag helper + Toast primitive
+
+**Files:**
+- `src/lib/demo-mode.ts` — create
+- `src/components/ui/toast.tsx` — create
+- `src/components/ui/ToastProvider.tsx` — create
+
+**Functions to implement:**
+- `isDemoMode(): boolean` — returns `process.env.NEXT_PUBLIC_DEMO_MODE === 'true'`. Single source of truth used by both server and client modules. No other code in the repo reads the env var directly.
+- `DEMO_TOAST_COPY` (exported const) — keyed object holding the four locked toast strings: `generic`, `sync`, `connect`, `genericModal` (see verbatim copy below).
+- `<ToastProvider />` — React context provider mounted near the root that owns a queue of `{ id, message }`. Exposes `useToast()` hook returning `{ show(message: string): void }`. Renders a stack of toasts bottom-right, auto-dismiss after 5s, dark Velvet Ledger styling per `docs/design-decisions.md` (no light variants — CONSTRAINT-05).
+- `useToast(): { show(message: string): void }` — hook consumers call from client components.
+
+**Locked copy strings (verbatim):**
+- `DEMO_TOAST_COPY.generic` = `"This is a demo. Clone the repo to run your own → github.com/swarnimb/personal-FA"`
+- `DEMO_TOAST_COPY.sync` = `"Sync is disabled in the demo. In the real app this pulls from SimpleFin and your exchanges nightly →"`
+- `DEMO_TOAST_COPY.connect` = `"Demo only — no real banks or exchanges connected. Run it locally to wire up yours →"`
+
+**Acceptance criteria:**
+- [ ] `isDemoMode()` returns `true` only when `NEXT_PUBLIC_DEMO_MODE === 'true'`; returns `false` for `undefined`, `'false'`, `'1'`, or any other value
+- [ ] `isDemoMode()` is the only file in `src/` that reads `process.env.NEXT_PUBLIC_DEMO_MODE` directly (verified by grep)
+- [ ] `<ToastProvider />` renders without error when wrapped around children
+- [ ] Calling `show(msg)` from a child component renders a toast containing the exact message text
+- [ ] Toast auto-dismisses after 5s
+- [ ] Toast uses only Velvet Ledger color tokens (CONSTRAINT-05: "Dark mode only — Velvet Ledger design system. No light mode, no theme toggle, no CSS variables for theme switching.")
+- [ ] No mobile breakpoint classes used in toast (CONSTRAINT-04: "Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.")
+
+**Tests required:**
+- `describe('isDemoMode')` → `test('returns true when env=true')`
+- `describe('isDemoMode')` → `test('returns false when env unset')`
+- `describe('isDemoMode')` → `test('returns false for non-"true" string values like "1" or "false"')`
+- `describe('ToastProvider')` → `test('renders message after show() called')`
+- `describe('ToastProvider')` → `test('removes toast after 5s')`
+- `describe('ToastProvider')` → `test('throws clear error if useToast called outside provider')`
+
+**Depends on:** None
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 56: DemoBanner component + mount in `(main)/layout.tsx`
+
+**Files:**
+- `src/components/layout/DemoBanner.tsx` — create
+- `src/app/(main)/layout.tsx` — modify
+
+**Functions to implement:**
+- `<DemoBanner />` — server-renderable component (no `'use client'`). Renders nothing when `isDemoMode()` is false. When true, renders a persistent full-width strip above the TopBar with the locked copy and an anchor to the GitHub repo.
+
+**Locked copy (verbatim):**
+- Banner text: `"Live demo with seeded data — no real accounts connected. View source on GitHub →"`
+- The phrase `"View source on GitHub →"` is the anchor; href = `https://github.com/swarnimb/personal-FA`, `target="_blank"`, `rel="noopener noreferrer"`.
+
+**Acceptance criteria:**
+- [ ] `<DemoBanner />` rendered above `<TopBar />` in `(main)/layout.tsx`
+- [ ] Banner renders on every route under `(main)/` group (Dashboard, Income, Spending, Investments, Net Worth, Accounts)
+- [ ] Banner is `null` (zero DOM impact) when `NEXT_PUBLIC_DEMO_MODE !== 'true'` — local dev sees no banner
+- [ ] Banner copy renders exactly: `"Live demo with seeded data — no real accounts connected. View source on GitHub →"`
+- [ ] GitHub anchor opens `https://github.com/swarnimb/personal-FA` in a new tab
+- [ ] Banner height does not break the existing `h-screen` flex layout — main content area still scrolls; sidebar height still fills
+- [ ] CONSTRAINT-04 ("Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.") satisfied — no responsive classes
+- [ ] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") satisfied — only Velvet Ledger tokens used
+
+**Tests required:**
+- `describe('DemoBanner')` → `test('renders nothing when demo mode off')`
+- `describe('DemoBanner')` → `test('renders banner with exact locked copy when demo mode on')`
+- `describe('DemoBanner')` → `test('GitHub link points to github.com/swarnimb/personal-FA with rel=noopener')`
+
+**Depends on:** Task 55
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 57: Mount ToastProvider at `(main)/layout.tsx` root
+
+**Files:**
+- `src/app/(main)/layout.tsx` — modify
+
+**Functions to implement:**
+- Wrap the existing `<PrivacyProvider>` subtree in `<ToastProvider>` so every page and modal under `(main)/` can call `useToast()`.
+
+**Acceptance criteria:**
+- [ ] `<ToastProvider>` mounted at `(main)/layout.tsx` such that all 6 tab pages and every modal descendant can resolve `useToast()`
+- [ ] No client/server-component boundary errors (ToastProvider is a `'use client'` boundary; the layout itself stays a server component by importing the client boundary)
+- [ ] Local dev still works — `useToast()` consumers in non-demo mode still resolve (they just won't be invoked because gates short-circuit before calling `show()`)
+
+**Tests required:**
+- `describe('(main)/layout')` → `test('renders children inside ToastProvider context')`
+- `describe('(main)/layout')` → `test('does not throw when DemoBanner is null in non-demo mode')`
+
+**Depends on:** Tasks 55, 56
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 58: Gate cron registration in `instrumentation.ts`
+
+**Files:**
+- `src/instrumentation.ts` — modify
+
+**Functions to implement:**
+- Add early-return guard at the top of `register()`: if `isDemoMode()` returns true, log `"[cron] Demo mode — skipping cron registration"` and return before dynamic-importing `node-cron`.
+
+**Acceptance criteria:**
+- [ ] When `NEXT_PUBLIC_DEMO_MODE=true`, `register()` does not import `node-cron`, does not call `cron.schedule`, and logs the demo skip line
+- [ ] When demo mode off, `register()` behaviour is byte-identical to current behaviour — cron schedules on the same `0 ${hour} * * *` expression
+- [ ] CONSTRAINT-08 ("Cron initialized in instrumentation.ts only — never import `node-cron` or schedule jobs inside API routes, React components, or any other file.") still satisfied — the gate stays in this file
+- [ ] No conditional `import` outside `register()` — the dynamic import remains inside the guarded branch
+
+**Tests required:**
+- `describe('instrumentation.register')` → `test('does not schedule cron when demo mode on', async () => { ... mocked process.env })`
+- `describe('instrumentation.register')` → `test('schedules cron at configured hour when demo mode off')`
+
+**Depends on:** Task 55
+**Specialist:** @data-sync
+
+---
+
+## Task 59: Gate encryption module load + sync entry points
+
+**Files:**
+- `src/lib/crypto.ts` — modify
+- `src/lib/sync.ts` — modify
+- `src/lib/sync-simplefin.ts` — modify
+- `src/lib/sync-crypto.ts` — modify
+
+**Functions to implement:**
+- `src/lib/crypto.ts`: replace the module-load-time `throw new Error('ENCRYPTION_KEY env var not set')` with: if `isDemoMode()` is true, skip the key validation and have `encrypt()` / `decrypt()` throw a clear `Error('encrypt() unreachable in demo mode')` if ever called. If demo mode off, keep current behaviour exactly.
+- `src/lib/sync.ts` → `runFullSync`: if `isDemoMode()`, return `{ status: 'success', transactionsInserted: 0, transactionsUpdated: 0, accountsSynced: 0, errors: ['demo mode'] }` immediately without touching the DB.
+- `src/lib/sync-simplefin.ts` → `syncSimplefin` exported function: same demo-mode early return with `{ inserted: 0, updated: 0, errors: ['demo mode'] }`.
+- `src/lib/sync-crypto.ts` → `syncExchange` exported function: same demo-mode early return with `{ accountsUpdated: 0, errors: ['demo mode'] }`.
+
+**Acceptance criteria:**
+- [ ] CONSTRAINT-06 ("All API credentials encrypted with AES-256-GCM before storing. Always call `encrypt()` from `src/lib/crypto.ts` before storing any credential.") preserved in V1.0 path — encrypt/decrypt still mandatory when demo mode off
+- [ ] In demo mode, importing `src/lib/crypto.ts` does NOT throw, even with `ENCRYPTION_KEY` unset (build pipeline runs without that secret)
+- [ ] In demo mode, `runFullSync()` returns immediately without calling SimpleFin / Coinbase / Kraken or reading the DB
+- [ ] In demo mode, calling `encrypt()` or `decrypt()` throws the clear unreachable error (defence-in-depth)
+- [ ] V1.0 regression: with demo mode off and a valid `ENCRYPTION_KEY`, all four functions behave exactly as before
+- [ ] No real credentials in any seeded data or in any code path callable during a demo-mode build
+
+**Tests required:**
+- `describe('crypto demo gate')` → `test('module loads without ENCRYPTION_KEY when demo mode on')`
+- `describe('crypto demo gate')` → `test('module throws when ENCRYPTION_KEY missing and demo mode off')`
+- `describe('crypto demo gate')` → `test('encrypt() throws unreachable error in demo mode')`
+- `describe('runFullSync demo gate')` → `test('returns no-op result in demo mode without DB calls')`
+- `describe('runFullSync demo gate')` → `test('runs full pipeline when demo mode off')` (existing test, verify still passes)
+- `describe('syncSimplefin demo gate')` → `test('returns inserted=0 in demo mode')`
+- `describe('syncExchange demo gate')` → `test('returns accountsUpdated=0 in demo mode')`
+
+**Depends on:** Task 55
+**Specialist:** @security (review) + @data-sync (implementation)
+
+---
+
+## Task 60: No-op wire on all write-action modals + inline category save + recurring approve/reject
+
+**Files:**
+- `src/components/transactions/AddTransactionModal.tsx` — modify
+- `src/components/accounts/ConnectBankModal.tsx` — modify
+- `src/components/accounts/AddExchangeModal.tsx` — modify
+- `src/components/accounts/AddManualAccountModal.tsx` — modify
+- `src/components/accounts/CSVImportModal.tsx` — modify
+- `src/components/investments/AddManualHoldingModal.tsx` — modify
+- `src/components/spending/SpendingTransactionList.tsx` — modify (inline category PATCH)
+- `src/components/transactions/PendingReviewPanel.tsx` — modify (Approve / Reject)
+- `src/components/transactions/EditPendingModal.tsx` — modify (Edit-then-confirm)
+- `src/components/accounts/SyncStatusPanel.tsx` — modify (Refresh All button)
+
+**Functions to implement:**
+- In each modal/handler's submit/POST function, add an `isDemoMode()` guard at the very top of the async handler. When true: call `useToast().show(<copy>)`, then `return` — never hit `fetch()`.
+- Sub-AC per file (single demo-mode pattern, varied toast string):
+
+  | File | Action | Toast key |
+  |---|---|---|
+  | AddTransactionModal | Save submit | `DEMO_TOAST_COPY.generic` |
+  | ConnectBankModal | Connect | `DEMO_TOAST_COPY.connect` |
+  | AddExchangeModal | Add | `DEMO_TOAST_COPY.connect` |
+  | AddManualAccountModal | Add | `DEMO_TOAST_COPY.generic` |
+  | CSVImportModal — file select | onChange before upload | `DEMO_TOAST_COPY.generic` |
+  | CSVImportModal — confirm | Confirm | `DEMO_TOAST_COPY.generic` |
+  | AddManualHoldingModal | Save | `DEMO_TOAST_COPY.generic` |
+  | SpendingTransactionList | inline category change | `DEMO_TOAST_COPY.generic` |
+  | PendingReviewPanel | Approve | `DEMO_TOAST_COPY.generic` |
+  | PendingReviewPanel | Reject | `DEMO_TOAST_COPY.generic` |
+  | EditPendingModal | Save+Approve | `DEMO_TOAST_COPY.generic` |
+  | SyncStatusPanel | Refresh All | `DEMO_TOAST_COPY.sync` |
+
+- For modals that close on success in V1.0, in demo mode: still close the modal and reset local form state after showing the toast (no DB call means no real persistence — the close gives the user a clean exit).
+- For the inline category Select in `SpendingTransactionList`: revert the optimistic select value back to original after the toast.
+
+**Acceptance criteria:**
+- [ ] Every listed handler short-circuits with a toast in demo mode and makes zero `fetch()` calls (verified by network-tab check in deployed demo and by unit-test fetch-spy)
+- [ ] Each toast string matches the locked copy table above exactly (no variants, no extra emoji)
+- [ ] Modals close cleanly after the no-op (no stuck "Saving…" state)
+- [ ] V1.0 regression: with demo mode off, every handler still POSTs/PATCHes the same endpoint with the same payload as before
+- [ ] CONSTRAINT-04 ("Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.") preserved — no responsive classes introduced
+- [ ] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") preserved
+
+**Tests required:**
+- `describe('AddTransactionModal demo gate')` → `test('shows generic toast and does not fetch in demo mode')`
+- `describe('AddTransactionModal demo gate')` → `test('fetches /api/transactions when demo mode off')`
+- `describe('ConnectBankModal demo gate')` → `test('shows connect toast in demo mode')`
+- `describe('AddExchangeModal demo gate')` → `test('shows connect toast in demo mode')`
+- `describe('AddManualAccountModal demo gate')` → `test('shows generic toast in demo mode')`
+- `describe('AddManualHoldingModal demo gate')` → `test('shows generic toast in demo mode')`
+- `describe('CSVImportModal demo gate')` → `test('shows toast on file-select in demo mode and does not upload')`
+- `describe('CSVImportModal demo gate')` → `test('shows toast on confirm in demo mode')`
+- `describe('SpendingTransactionList demo gate')` → `test('reverts category select and shows toast in demo mode')`
+- `describe('PendingReviewPanel demo gate')` → `test('Approve shows toast and does not fetch in demo mode')`
+- `describe('PendingReviewPanel demo gate')` → `test('Reject shows toast and does not fetch in demo mode')`
+- `describe('EditPendingModal demo gate')` → `test('Save shows toast in demo mode')`
+- `describe('SyncStatusPanel demo gate')` → `test('Refresh All shows sync toast in demo mode')`
+
+**Depends on:** Tasks 55, 57
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 61: Hide TopBar Sync button in demo mode
+
+**Files:**
+- `src/components/layout/TopBar.tsx` — modify
+- (Verify whether a Sync button currently sits in TopBar — if not present, this task scopes only the SyncStatusPanel Refresh All button covered in Task 60.)
+
+**Functions to implement:**
+- If a top-bar Sync element exists, wrap it in `isDemoMode() ? null : <SyncControl/>`.
+- If it does not exist in code today (the only sync entry point found in the codebase audit is `SyncStatusPanel.handleRefresh` and the `SyncStatusPanel` button labelled "Refresh All"), then this task collapses to a docstring confirmation in the PR description: "No standalone TopBar sync button exists; the only user-facing sync trigger is `SyncStatusPanel`, gated in Task 60."
+
+**Acceptance criteria:**
+- [ ] No user-facing sync trigger is clickable in deployed demo (visual verification on Accounts tab — Refresh All button still renders but toasts; no other sync button anywhere)
+- [ ] V1.0 regression: TopBar visually identical in non-demo mode
+
+**Tests required:**
+- `describe('TopBar demo gate')` → `test('renders without sync control in demo mode')` — skip if no such control exists; document in PR
+
+**Depends on:** Task 60
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 62: Static-export config split — `next.config.demo.mjs` + shim
+
+**Files:**
+- `next.config.demo.mjs` — create
+- `next.config.mjs` — modify (becomes a shim)
+
+**Functions to implement:**
+- `next.config.demo.mjs` exports a NextConfig with:
+  - `output: 'export'`
+  - `images: { unoptimized: true }`
+  - `basePath: '/personal-FA'`
+  - `trailingSlash: true`
+- `next.config.mjs` becomes:
+  ```js
+  /** @type {import('next').NextConfig} */
+  const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const config = isDemo
+    ? (await import('./next.config.demo.mjs')).default
+    : {};
+  export default config;
+  ```
+- (Top-level await is supported in `.mjs` Next config files since Next 13.)
+
+**Acceptance criteria:**
+- [ ] `NEXT_PUBLIC_DEMO_MODE=true npm run build` produces an `out/` directory at the repo root
+- [ ] `npm run build` (no env) produces a normal `.next/` directory — no `out/`, no static export — V1.0 unchanged
+- [ ] All generated asset URLs in `out/` use the `/personal-FA/` prefix (HTML inspection)
+- [ ] No `out/api/` directory exists after the demo build (API routes are excluded from static export — covered by Task 63)
+- [ ] `trailingSlash: true` produces `out/index.html`, `out/income/index.html`, etc. (six tab directories)
+
+**Tests required:**
+- No automated test possible for build output. AC verified by:
+  - manual build with `NEXT_PUBLIC_DEMO_MODE=true npm run build` → inspect `out/` tree
+  - manual build with default env → inspect `.next/` exists, `out/` does not
+
+**Depends on:** Task 55 (env read pattern)
+**Specialist:** none — default @dev
+
+---
+
+## Task 63: Strip `app/api/**` from the static export
+
+**Files:**
+- `src/app/api/**/route.ts` — modify (add `export const dynamic = 'force-static'` or guard each route to no-op in demo, OR adopt the Next 15 pattern of moving exclusion to config)
+- `next.config.demo.mjs` — modify
+
+**Decision:** Next 15 `output: 'export'` already refuses to emit API routes that use dynamic features. The cleanest path: in demo mode, every API route file exports a stub that returns `Response.json({ data: null })` and `export const dynamic = 'force-static'`. We do this by adding a top-level `if (isDemoMode())` short-circuit at the top of each `route.ts`'s exported `POST` / `GET` / `PATCH` / `DELETE` handler returning `{ error: 'demo mode' }` with 404. Since static export drops these anyway, this is belt-and-braces — the AC is verified by `out/` containing zero `api/` directories.
+
+**Functions to implement:**
+- Add a small helper `src/lib/api-demo-guard.ts` exporting `demoNotFound(): Response` that returns a 404 JSON.
+- At the top of each handler in `src/app/api/**/route.ts` (23 route files identified in audit), add `if (isDemoMode()) return demoNotFound()`.
+
+**Acceptance criteria:**
+- [ ] `out/api/` does NOT exist after `NEXT_PUBLIC_DEMO_MODE=true npm run build`
+- [ ] Every API handler returns 404 with `{ error: 'demo mode' }` if called in demo mode (defence-in-depth; in practice the routes aren't deployed)
+- [ ] V1.0 regression: with demo mode off, every API handler behaves exactly as before
+- [ ] No new third-party dependency added
+
+**Tests required:**
+- `describe('api-demo-guard')` → `test('demoNotFound returns 404 with demo mode error message')`
+- `describe('/api/sync POST demo gate')` → `test('returns 404 in demo mode')`
+- `describe('/api/transactions POST demo gate')` → `test('returns 404 in demo mode')`
+- (Pattern-test one route per HTTP verb family — full coverage is unrealistic; the static-export AC carries the rest.)
+
+**Depends on:** Task 55, Task 62
+**Specialist:** none — default @dev
+
+---
+
+## Task 64: basePath audit — fix raw `/` URLs across the codebase
+
+**Files:** (full list confirmed by codebase audit; all `modify`)
+- `src/components/dashboard/SpendingConcentration.tsx` — `href="/spending"`
+- `src/components/income/IncomeTransactionList.tsx` — `href="/transactions?type=income"`
+- `src/components/spending/SpendingTransactionList.tsx` — `href="/spending"`
+- Plus any additional raw `/` URLs surfaced by the audit grep (`href="/`, `src="/`, `fetch('/`, `fetch(\`/`)
+
+**Functions to implement:**
+- For every internal navigation: replace raw `<a href="/path">` with Next.js `<Link href="/path">` from `next/link`. Next's `<Link>` automatically prepends `basePath` when configured. This avoids hand-prefixing.
+- For every raw `<img src="/foo.png">`: switch to `next/image`'s `<Image>` (also basePath-aware) OR prefix manually using a helper `assetPath(p)` defined in `src/lib/demo-mode.ts` that returns `(isDemoMode() ? '/personal-FA' : '') + p`.
+- For every hard-coded `fetch('/api/...')` in client components: leave as-is — these only run in V1.0. In demo mode the corresponding handler (Task 60) short-circuits before fetch.
+
+**Acceptance criteria:**
+- [ ] Grep `href="/` across `src/` returns zero matches outside `<Link>` usage
+- [ ] Grep `src="/` (image/script tags) across `src/` returns zero matches outside `next/image` or `assetPath()` calls
+- [ ] On deployed demo at `https://swarnimb.github.io/personal-FA`, clicking "View All →" on any tab navigates correctly with the `/personal-FA` prefix preserved (manual smoke test against deployed URL)
+- [ ] V1.0 regression: local dev navigation between tabs unchanged
+
+**Tests required:**
+- `describe('SpendingConcentration link')` → `test('renders Next Link to /spending (basePath applied by Next at build time)')`
+- `describe('IncomeTransactionList link')` → `test('renders Next Link to /transactions?type=income')`
+- `describe('SpendingTransactionList link')` → `test('renders Next Link to /spending')`
+- Audit AC verified by a one-line CI grep step
+
+**Depends on:** Task 62
+**Specialist:** none — default @dev
+
+---
+
+## Task 65: Time-range selector — client-side toggle of all 6 pre-baked datasets
+
+**Recommendation (one-line WHY):** Option **(b)** — bake all 6 range datasets into the page bundle and toggle client-side. Smaller diff than pre-rendering 6 routes per tab, matches the existing `useSearchParams`-driven selector pattern, no inter-range navigation latency. Baking 6 ranges (instead of 3) roughly doubles the per-tab payload; sanity-check the gzipped bundle during implementation and fall back to option (a) if the budget is blown.
+
+**Files:**
+- `src/lib/dashboard-queries.ts` — modify (add a helper that returns all 6 ranges in one call when called at build time)
+- `src/app/(main)/page.tsx` — modify (Dashboard — fetch all ranges at build time)
+- `src/app/(main)/income/page.tsx` — modify
+- `src/app/(main)/spending/page.tsx` — modify
+- `src/app/(main)/investments/page.tsx` — modify
+- `src/app/(main)/net-worth/page.tsx` — modify
+- `src/app/(main)/accounts/page.tsx` — modify (if it uses range)
+- `src/components/layout/TimeRangeSelector.tsx` — modify
+- `src/components/layout/RangeDataProvider.tsx` — create (client context that holds `{ ytd, '1m', '3m', '6m', '1y', max }` for the current tab and exposes the active slice via `useRangeData()`)
+
+**Functions to implement:**
+- `getAllRangeData<T>(fetchOne: (from: Date, to: Date, key: RangeKey) => Promise<T>): Promise<{ ytd: T; '1m': T; '3m': T; '6m': T; '1y': T; max: T }>` — utility that fans out six queries in parallel for `ytd`, `1m`, `3m`, `6m`, `1y`, `max`.
+- Each page in demo mode: server-fetch all 6 datasets at build time, pass to a new `<RangeDataProvider initial={{ ytd, '1m', '3m', '6m', '1y', max }}>` client wrapper, which exposes via context to the children. Children (charts, cards) read from the active range slice.
+- `useRangeData()` hook: reads context + current range from `useSearchParams`, returns the active slice.
+- In demo mode, `TimeRangeSelector` updates the URL search param via `router.replace()` (no `router.push()` — avoids back-button spam). The page does NOT re-fetch — the provider already has all data.
+- In V1.0 (demo mode off), behaviour unchanged — selector triggers `router.push` and the server component re-renders with new range.
+- TimeRangeSelector renders all six buttons (YTD, 1M, 3M, 6M, 1Y, Max) unchanged from V1.0 in both modes.
+
+**Acceptance criteria:**
+- [ ] On deployed demo, switching between all 6 ranges (YTD/1M/3M/6M/1Y/Max) is instant — no network request fires (verified by browser Network tab)
+- [ ] All six range datasets are present in the static HTML/JS bundle for each tab
+- [ ] CONSTRAINT-13 ("All financial query functions live in a shared importable module under `src/lib/` — never defined module-private inside a page/route server component.") preserved — `getAllRangeData` and all underlying queries stay in `src/lib/dashboard-queries.ts` and siblings
+- [ ] CONSTRAINT-02 ("All financial calculations in PostgreSQL — never in application code.") preserved — the six datasets are each computed by SQL views/`$queryRaw` calls, not assembled in JS
+- [ ] V1.0 regression: with demo mode off, time-range selector behaves byte-identically to today (URL change → server re-render)
+- [ ] Bundle-size sanity check: each tab's page JS payload increases by less than 400KB gzipped after baking six ranges; if blown, fall back to option (a) pre-rendered routes per range
+
+**Tests required:**
+- `describe('getAllRangeData')` → `test('returns all six ranges in parallel')`
+- `describe('RangeDataProvider')` → `test('useRangeData returns 1m slice when range=1m')`
+- `describe('RangeDataProvider')` → `test('useRangeData returns 1y slice when range=1y')`
+- `describe('RangeDataProvider')` → `test('useRangeData returns max slice when range=max')`
+- `describe('RangeDataProvider')` → `test('falls back to default range when range is unknown')`
+- `describe('TimeRangeSelector demo behaviour')` → `test('uses router.replace not router.push in demo mode')`
+- Integration: existing dashboard-queries integration tests (Task 54) continue to pass against `amibroke_test`
+
+**Depends on:** Tasks 55, 62
+**Specialist:** none — default @dev
+
+---
+
+## Task 66: Verify seed-demo data + fictional-names audit
+
+**Files:**
+- `prisma/seed-demo.ts` — read + audit, modify only if real names/handles found
+- (new) `scripts/audit-seed-data.ts` — create a one-shot script that prints every unique merchant/account/holding name in the seeded DB so a human can eyeball-check
+
+**Functions to implement:**
+- Read `prisma/seed-demo.ts` end-to-end. Confirm:
+  - No real bank/exchange API keys, access URLs, or secrets anywhere in the file
+  - No real personal names, emails, addresses, or phone numbers
+  - Account names use fictional brands (e.g. "Chase Checking" → leave bank names; "John Doe" → not present)
+- `scripts/audit-seed-data.ts` connects to the seeded DB and prints `SELECT DISTINCT merchant FROM Transaction`, `SELECT name FROM Account`, `SELECT symbol FROM Holding`. Output is reviewed once by a human at build time.
+
+**Acceptance criteria:**
+- [ ] Manual review: no plausible real person's name, email, or phone in any seeded row
+- [ ] No real-looking API keys/secrets in `seed-demo.ts` (grep for hex strings ≥ 32 chars, `sk_`, `xpriv`, JWT fragments)
+- [ ] Seeded transactions span the documented 2021→2026 window with realistic but unmistakably fake merchants
+- [ ] CONSTRAINT-01 ("All amounts stored as integer cents.") and CONSTRAINT-11 ("CreditCard/Loan balances stored as positive cents — negate in net worth queries.") both honoured by the seed (existing — verify, don't change)
+
+**Tests required:**
+- `describe('audit-seed-data script')` → `test('runs without error against amibroke_test')`
+- Manual AC for the human-eyeball check — captured in PR description
+
+**Depends on:** None (can run in parallel with the build pipeline tasks)
+**Specialist:** @security (review the audit output for any plausible-real leakage)
+
+---
+
+## Task 67: Favicon fix
+
+**Files:**
+- `public/favicon.ico` — create (a Velvet Ledger-styled 32×32 icon — wallet/coin mark in the brand primary tone)
+- `src/app/layout.tsx` — modify (optional: add explicit `icons` metadata for clarity)
+
+**Functions to implement:**
+- Drop a `favicon.ico` (multi-size: 16, 32, 48) into `public/` so Next.js serves it from `/` (and `/personal-FA/favicon.ico` in demo mode via basePath).
+- Add to `metadata` in `src/app/layout.tsx`:
+  ```ts
+  icons: { icon: '/favicon.ico' }
+  ```
+- The `public/` directory does not currently exist in this repo (confirmed by codebase audit) — create it.
+
+**Acceptance criteria:**
+- [ ] `public/favicon.ico` exists and is a valid ICO with at least the 32×32 size
+- [ ] Browser network panel shows 200 (not 404) for `/favicon.ico` on local dev
+- [ ] Browser network panel shows 200 for `/personal-FA/favicon.ico` on deployed demo
+- [ ] Browser tab shows the icon on every route (all 6 tabs)
+- [ ] Closes the QA residual flagged in `docs/qa-report.md`
+- [ ] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") respected by the icon palette
+
+**Tests required:**
+- No automated unit test for a binary asset. Verified by:
+  - `describe('favicon')` → `test('public/favicon.ico exists and is non-empty')` (filesystem assert in a node-environment vitest)
+  - Manual: tab icon visible on all 6 tabs
+
+**Depends on:** None
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 68: GitHub Actions workflow `deploy-demo.yml`
+
+**Files:**
+- `.github/workflows/deploy-demo.yml` — create
+
+**Functions to implement:**
+- Workflow triggers: `push` to `main` and `workflow_dispatch`.
+- Single `build-and-deploy` job on `ubuntu-latest` with:
+  - `services: postgres: image: postgres:16` exposing port 5432 with `POSTGRES_PASSWORD: postgres`, `POSTGRES_DB: amibroke_demo`
+  - Steps:
+    1. `actions/checkout@v4`
+    2. `actions/setup-node@v4` with `node-version: 20` and `cache: 'npm'`
+    3. `npm ci`
+    4. `npx prisma generate` then `npx prisma migrate deploy` with `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/amibroke_demo`
+    5. `npx tsx prisma/seed-demo.ts` with the same `DATABASE_URL`
+    6. `NEXT_PUBLIC_DEMO_MODE=true DATABASE_URL=... npm run build`
+    7. `actions/upload-pages-artifact@v3` with `path: ./out`
+    8. `actions/deploy-pages@v4`
+- Permissions block: `contents: read`, `pages: write`, `id-token: write`
+- Concurrency: `group: pages, cancel-in-progress: false`
+- Add a `pg_isready` wait loop before `prisma migrate deploy` to prevent flaky first-runs while Postgres warms up.
+
+**Acceptance criteria:**
+- [ ] Workflow file is valid YAML (`actionlint` or GitHub's own validation passes)
+- [ ] On first push to `main` after merge, workflow runs to completion in under 6 minutes (PRD §14 AC)
+- [ ] Deployed URL `https://swarnimb.github.io/personal-FA` serves the Dashboard within 2s first paint
+- [ ] No secrets exposed in any step's log output (no `echo $ENCRYPTION_KEY`, no `printenv`)
+- [ ] `ENCRYPTION_KEY` is NOT set in the workflow env (verified — Task 59 makes it unnecessary in demo mode)
+- [ ] Concurrency policy prevents two simultaneous deploys
+- [ ] All seeded data uses `amibroke_demo` DB name (not `amibroke` or `amibroke_test` — keeps the integration suite untouched)
+- [ ] **Manual setup step (PR description):** Before the first deploy, repo Settings → Pages must be flipped to source = "GitHub Actions" (not the legacy gh-pages branch source).
+
+**Tests required:**
+- No automated test possible. AC verified by:
+  - merging the PR and observing the green workflow run
+  - inspecting the run log for any leaked secret
+  - timing the run (< 6 min)
+  - hitting the deployed URL and timing first paint (< 2s)
+
+**Depends on:** Tasks 55, 59, 62, 63, 64, 65, 66, 67
+**Specialist:** @security (review for credential exposure)
+
+---
+
+## Task 69: PRD § Global Constraints + architecture.md Security clarifiers
+
+**Files:**
+- `docs/prd.md` — modify (one-line clarifier in Global Constraints)
+- `docs/architecture.md` — modify (Security Architecture row — scope two rules to V1.0)
+
+**Functions to implement:**
+- In `docs/prd.md` § Global Constraints, append the sentence: `"These constraints describe V1.0. See § 14 for the demo deployment which is a separate static artifact."`
+- In `docs/architecture.md` § Security Architecture table, modify the `LAN exposure` row's "Approach" cell from:
+  > "No auth by design (trusted home network). Never expose to public internet."
+
+  to:
+  > "(V1.0) No auth by design (trusted home network). Never expose the V1.0 server to the public internet. See § Demo Deployment (Static Export Artifact) for the demo build, which is a separate static artifact with no API surface and no real credentials."
+
+**Acceptance criteria:**
+- [ ] PRD clarifier inserted verbatim
+- [ ] architecture.md row updated; cross-reference to `§ Demo Deployment (Static Export Artifact)` resolves correctly
+- [ ] No other Global Constraints or Security rules modified
+- [ ] **Note:** This task may already be complete from the session-19 docs writes. Verify state of both files; if the edits already exist verbatim, mark this task done with a one-line note in the PR.
+
+**Tests required:**
+- N/A (docs-only)
+
+**Depends on:** None — can ship anytime
+**Specialist:** none — default @dev
+
+---
+
+## Task 70: README rewrite — hero, screenshots, tech stack, live demo, one-command setup
+
+**Files:**
+- `README.md` — modify (full rewrite)
+- `docs/screenshots/` — create directory and add 6 PNG screenshots from the deployed demo
+
+**Functions to implement:**
+- Sections in order:
+  1. **Hero** — banner image (Dashboard screenshot, full width)
+  2. **AmIBroke** — name + one-paragraph what-it-is. Note: "Repo is `personal-FA`; the product is **AmIBroke**."
+  3. **Live demo** — link `https://swarnimb.github.io/personal-FA` with a "no real data" disclaimer
+  4. **Screenshots** — 6 PNGs, one per tab (Dashboard, Income, Spending, Investments, Net Worth, Accounts)
+  5. **Tech stack** — Next.js 15.5.14, TypeScript, PostgreSQL, Prisma 5.22, Tailwind, shadcn/ui, Recharts, TanStack Query, node-cron, SimpleFin, Coinbase, Kraken
+  6. **One-command local setup**:
+     ```sh
+     npm ci && cp .env.example .env && npx prisma migrate dev && npm run dev
+     ```
+     (Document that the user must supply `DATABASE_URL` and `ENCRYPTION_KEY` in `.env`.)
+  7. **Run the demo locally** — `NEXT_PUBLIC_DEMO_MODE=true npm run build && npx serve out`
+  8. **Repo vs product name** — short paragraph: "The GitHub repo is `personal-FA` for historical reasons; the product name is **AmIBroke**. All in-app strings and the README use AmIBroke."
+
+**Acceptance criteria:**
+- [ ] README renders correctly on GitHub repo page
+- [ ] All 6 screenshots load (no broken-image icons)
+- [ ] Live demo link works
+- [ ] One-command setup actually works on a fresh clone with a fresh Postgres
+- [ ] `personal-FA` vs `AmIBroke` clarifier present
+- [ ] No real credentials in the README
+
+**Tests required:**
+- `describe('README')` → `test('contains live demo link to swarnimb.github.io/personal-FA')`
+- `describe('README')` → `test('lists all six tab screenshots')`
+- Manual: clone fresh, follow the one-command setup, confirm dev server boots
+
+**Depends on:** Task 68 (need the deployed demo live so screenshots are real)
+**Specialist:** none — default @dev
+
+---
+
+## Task 71: V1.0 regression sweep + QA gate
+
+**Files:** none — verification only
+
+**Functions to implement:**
+- Run full V1.0 regression locally with `NEXT_PUBLIC_DEMO_MODE` unset:
+  1. `npm test` — full unit suite passes
+  2. `npm run test:integration` — full integration suite passes against `amibroke_test` (CALC-01 via Task 54)
+  3. `npm run dev` — boot the app against a real seeded DB, click through all 6 tabs
+  4. Walk every V1.0 acceptance criterion from the PRD and confirm green
+- Run full demo verification against the deployed URL:
+  1. First paint under 2s (Chrome DevTools Performance tab)
+  2. All 6 tabs render with seeded data
+  3. Time-range selector switches between all 6 ranges instantly (Network tab: zero requests)
+  4. Banner visible on every page with locked copy + working GitHub link
+  5. Every write action triggers the correct toast and never POSTs
+  6. No console errors on any tab
+  7. No 404 in Network tab (favicon, any asset)
+  8. All asset URLs include `/personal-FA/` prefix
+- File a QA report at `docs/qa-report.md` (append a new section "Task 71 — Demo Deployment QA") with a green/red checklist matching every PRD §14 AC.
+
+**Acceptance criteria:**
+- [ ] All PRD § 14 acceptance criteria green (visitor first paint < 2s, 6 tabs render, time-range instant across all 6 ranges, banner with exact copy, every write is no-op + correct toast, V1.0 local unchanged, no real credentials in logs/artifact, workflow < 6 min, no `out/api/`, basePath asset URLs resolve, README hero+6 screenshots+live demo link+one-command setup, favicon 200 everywhere, no console errors)
+- [ ] All 13 CONSTRAINTs unviolated (re-read `docs/constraints.md` end-to-end; confirm each)
+- [ ] Full V1.0 acceptance criteria still pass on local instance (CONSTRAINT-01, CONSTRAINT-02, CONSTRAINT-11 calculations equal pre-demo values; CONSTRAINT-08 cron registers on local boot; CONSTRAINT-12 cash-flow figures unchanged; CONSTRAINT-13 query module structure intact)
+- [ ] QA-approved sign-off recorded in `docs/qa-report.md`
+
+**Tests required:**
+- `npm test` — must be all green
+- `npm run test:integration` — must be all green
+- Manual smoke per checklist above
+
+**Depends on:** Tasks 55–70 (all)
+**Specialist:** @qa

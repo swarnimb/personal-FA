@@ -193,6 +193,8 @@ The Investments tab and database schema must accommodate both cases. The sync jo
 | A-06 | PostgreSQL views manageable within Prisma | Technical feasibility | Research | Resolved |
 | A-07 | Generic CSV scaffold viable without mapping UI | Technical feasibility | Accepted risk | Accepted |
 | A-08 | USD spot prices for crypto assets available at sync time | Service capability | Research | Resolved |
+| A-09 | GitHub Pages free tier suffices for static demo | Service capability + Cost | Accepted risk | Accepted |
+| A-10 | Next.js 15 `output: 'export'` compatible with AmIBroke codebase | Technical feasibility | Accepted risk | Accepted |
 
 **Open count: 0** — `@plan` is unblocked.
 
@@ -251,3 +253,57 @@ These assumptions produced changes to the planned architecture that must be carr
    - `src/lib/kraken.ts`: add public Ticker call before writing BalanceSnapshot; add static Kraken currency code → pair mapping (e.g., `XBT` → `XBTUSD`, `XETH` → `ETHUSD`).
    - Fiat-pegged assets bypass price lookup (multiplier = 1.0).
    - Asset with no USD pair: log warning to SyncLog, store 0, continue sync.
+
+---
+
+## Added 2026-05-19 — Demo deployment (GitHub Pages static export)
+
+---
+
+### A-09: GitHub Pages free tier suffices for the static demo
+
+**Category:** Service capability + Cost
+
+**Assumption:** GitHub Pages free tier (1 GB storage, 100 GB/month bandwidth, 10 builds/hour) is sufficient to host the static export of the AmIBroke demo at any realistic traffic level. The pre-rendered HTML + JS bundle is expected to be well under 50 MB total — orders of magnitude below the storage cap.
+
+**Why it's critical:** If GitHub Pages limits, refuses to serve, or rate-limits the demo URL, the public demo is broken and the entire "shareable showcase" outcome fails.
+
+**Resolution approach:** Accepted risk
+
+**Resolution detail:**
+- GitHub Pages is a documented, widely-used static hosting service; serving pre-rendered Next.js exports under a project subpath is a common, well-trodden pattern.
+- No code paths require server runtime in demo mode — all sync/write paths are client-side no-ops with toasts. Nothing in the demo needs an API route, a database connection, or any compute.
+- Cold starts: none. Static files are served directly from GitHub's CDN edge.
+- Realistic traffic from a personal portfolio link is comfortably inside the 100 GB/month bandwidth allowance even with thousands of monthly visitors.
+- Build cadence (push to `main`) is well inside the 10 builds/hour ceiling for a single-developer project.
+
+**Contingency:** If GitHub Pages becomes problematic (limits hit, outage, policy change, takedown), migrate the `out/` artifact to Cloudflare Pages or Netlify — both free static hosts with identical deploy models. Migration cost: changing the GitHub Action's deploy step. Estimate: ~30 minutes.
+
+**Related:** A-06 (Prisma views workflow — now relied on at BUILD time in CI, not at request time).
+
+**Status:** Accepted risk
+
+---
+
+### A-10: Next.js 15 `output: 'export'` mode is compatible with the AmIBroke codebase
+
+**Category:** Technical feasibility
+
+**Assumption:** The project's current Next.js 15 App Router code paths — async server components that `await` query functions from `src/lib/*-queries.ts`, client components for charts/modals/toasts, the `(main)` layout structure, the global time-range selector — are all compatible with `output: 'export'` when `NEXT_PUBLIC_DEMO_MODE=true`. The only documented incompatibilities (API routes at runtime, `next/image` default loader, middleware, `revalidate`/`force-dynamic`) either don't apply to demo paths or are addressable with minor config changes (`images.unoptimized: true`, no middleware in the project today).
+
+**Why it's critical:** If a critical page or component breaks under `output: 'export'`, the demo cannot be statically built. The failure is discovered at build time, not at runtime — fail-fast — but it still blocks the demo until resolved.
+
+**Resolution approach:** Accepted risk
+
+**Resolution detail:**
+- The CONSTRAINT-13 refactor (Task 53) already extracted data-layer queries into testable importable functions in `src/lib/*-queries.ts`. Those functions are statically callable at build time and integration-tested against `amibroke_test` (Task 54). The exact seam needed for static export is already in place.
+- Server components already follow the canonical `async function Page() { const x = await getX(); return <UI x={x} />; }` pattern — the exact pattern Next.js documents as `output: 'export'`-compatible.
+- The Add Transaction modal, time-range selector, charts (Recharts), toasts, banner, pending badge — all client components — work identically on static.
+- CONSTRAINT-08 is honored by gating cron registration in `instrumentation.ts` on `IS_DEMO`, so the instrumentation hook doesn't try to register `node-cron` during a static build.
+- API routes under `app/api/**` are dropped by Next.js automatically under `output: 'export'`. Since all demo write paths are client-side no-op + toast, nothing in the demo path needs an API route.
+
+**Contingency:** If a specific page breaks under `output: 'export'`, the fallback is one of: (a) convert that page to a client component reading pre-fetched JSON baked into the page bundle, or (b) pre-render the page as separate routes per data variant (e.g., the time-range selector option (a) from the CTO note). Either fallback is local to a single page and bounded in cost. If `instrumentation.ts` itself fights static export, the gate is hoisted earlier (e.g., a no-op stub file selected at build time).
+
+**Related:** CONSTRAINT-13 (the prerequisite that makes this viable), CONSTRAINT-08 (cron gated off in demo so `instrumentation.ts` does not fight static export).
+
+**Status:** Accepted risk
