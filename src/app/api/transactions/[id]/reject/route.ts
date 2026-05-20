@@ -1,10 +1,12 @@
 import { TransactionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { id } = await params
   try {
     const tx = await db.transaction.findUnique({ where: { id } })

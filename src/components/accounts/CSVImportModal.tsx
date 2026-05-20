@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type Account = { id: string; name: string }
 type PreviewData = { headers: string[]; preview: { row: number; cells: string[] }[]; totalRows: number; fileContent: string }
@@ -36,6 +38,7 @@ export function CSVImportModal({ accounts }: { accounts: Account[] }) {
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const toast = useToast()
 
   const reset = () => {
     setAccountId('')
@@ -50,6 +53,11 @@ export function CSVImportModal({ accounts }: { accounts: Account[] }) {
   const handleFileChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
     const file = ev.target.files?.[0]
     if (!file) return
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      setIsOpen(false) // onOpenChange triggers reset()
+      return
+    }
     const fileContent = await file.text()
     const form = new FormData()
     form.append('file', file)
@@ -71,6 +79,11 @@ export function CSVImportModal({ accounts }: { accounts: Account[] }) {
   const handleConfirm = async () => {
     if (!preview || !accountId || !colMap.dateCol || !colMap.amountCol || !colMap.descriptionCol) {
       setError('Select an account and map all three columns before confirming')
+      return
+    }
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      setIsOpen(false) // onOpenChange triggers reset()
       return
     }
     setIsConfirming(true)

@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type Exchange = 'Coinbase' | 'Kraken'
 type FormState = { exchange: Exchange | ''; apiKey: string; apiSecret: string }
@@ -28,6 +30,7 @@ export function AddExchangeModal() {
   const [form, setForm] = useState<FormState>(EMPTY)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const toast = useToast()
 
   const set = <K extends keyof FormState>(k: K, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -43,6 +46,12 @@ export function AddExchangeModal() {
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault()
     if (!validate()) return
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.connect)
+      setForm(EMPTY)
+      setIsOpen(false)
+      return
+    }
     setIsSubmitting(true)
     try {
       const res = await fetch('/api/accounts/exchange', {

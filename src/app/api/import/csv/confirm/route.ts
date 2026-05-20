@@ -3,6 +3,7 @@ import { TransactionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
 import { parseCSV, mapColumns } from '@/lib/csv'
 import { categorizeTransaction } from '@/lib/categorize'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const confirmSchema = z.object({
   accountId: z.string().min(1, 'accountId is required'),
@@ -15,6 +16,7 @@ const confirmSchema = z.object({
 })
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   let body: unknown
   try { body = await req.json() } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })

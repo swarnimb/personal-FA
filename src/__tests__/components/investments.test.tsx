@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrivacyProvider } from '../../context/PrivacyContext'
+import { ToastProvider } from '../../components/ui/ToastProvider'
 import { HoldingsList } from '../../components/investments/HoldingsList'
 import { PortfolioValueCard } from '../../components/investments/PortfolioValueCard'
 import { AllocationBreakdown } from '../../components/investments/AllocationBreakdown'
@@ -81,18 +82,22 @@ describe('PortfolioValueCard', () => {
 describe('HoldingsList', () => {
   it('renders Add Manual CTA when hasHoldings=false', () => {
     render(
-      <PrivacyProvider>
-        <HoldingsList hasHoldings={false} holdings={[]} accounts={MOCK_ACCOUNTS} />
-      </PrivacyProvider>
+      <ToastProvider>
+        <PrivacyProvider>
+          <HoldingsList hasHoldings={false} holdings={[]} accounts={MOCK_ACCOUNTS} />
+        </PrivacyProvider>
+      </ToastProvider>
     )
     expect(screen.getByRole('button', { name: /add manual holding/i })).toBeInTheDocument()
   })
 
   it('renders holdings table with columns when hasHoldings=true', () => {
     render(
-      <PrivacyProvider>
-        <HoldingsList hasHoldings={true} holdings={MOCK_HOLDINGS} accounts={MOCK_ACCOUNTS} />
-      </PrivacyProvider>
+      <ToastProvider>
+        <PrivacyProvider>
+          <HoldingsList hasHoldings={true} holdings={MOCK_HOLDINGS} accounts={MOCK_ACCOUNTS} />
+        </PrivacyProvider>
+      </ToastProvider>
     )
     expect(screen.getByText('Apple Inc')).toBeInTheDocument()
     expect(screen.getByText('AAPL')).toBeInTheDocument()
@@ -104,9 +109,11 @@ describe('HoldingsList', () => {
 
   it('renders allocation percentage column', () => {
     render(
-      <PrivacyProvider>
-        <HoldingsList hasHoldings={true} holdings={MOCK_HOLDINGS} accounts={MOCK_ACCOUNTS} />
-      </PrivacyProvider>
+      <ToastProvider>
+        <PrivacyProvider>
+          <HoldingsList hasHoldings={true} holdings={MOCK_HOLDINGS} accounts={MOCK_ACCOUNTS} />
+        </PrivacyProvider>
+      </ToastProvider>
     )
     // AAPL: 90000 / 540000 = 16.7%, VOO: 450000 / 540000 = 83.3%
     expect(screen.getByText('16.7%')).toBeInTheDocument()
@@ -140,7 +147,7 @@ describe('AllocationBreakdown', () => {
 describe('AddManualHoldingModal', () => {
   it('currentValue field is required', async () => {
     const user = userEvent.setup()
-    render(<AddManualHoldingModal accountId="acc-1" onSuccess={vi.fn()} />)
+    render(<ToastProvider><AddManualHoldingModal accountId="acc-1" onSuccess={vi.fn()} /></ToastProvider>)
 
     await user.click(screen.getByRole('button', { name: /add manual holding/i }))
 

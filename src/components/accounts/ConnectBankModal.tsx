@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 class ConnectBankError extends Error {
   constructor(message: string) {
@@ -23,10 +25,17 @@ export function ConnectBankModal() {
   const [token, setToken] = useState('')
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   const handleConnect = async (ev: React.FormEvent) => {
     ev.preventDefault()
     if (!token.trim()) { setError('Setup token is required'); return }
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.connect)
+      setToken('')
+      setIsOpen(false)
+      return
+    }
     setIsConnecting(true)
     setError(null)
     try {

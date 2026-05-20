@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { SpendingTransactionList } from '../../components/spending/SpendingTransactionList'
 import { PrivacyProvider } from '../../context/PrivacyContext'
+import { ToastProvider } from '../../components/ui/ToastProvider'
 
 // Radix UI polyfills
 beforeAll(() => {
@@ -25,9 +26,11 @@ const MOCK_ACCOUNTS = [{ id: 'acc-1', name: 'Chase Checking' }]
 
 function renderList() {
   return render(
-    <PrivacyProvider>
-      <SpendingTransactionList transactions={MOCK_TXS} accounts={MOCK_ACCOUNTS} />
-    </PrivacyProvider>,
+    <ToastProvider>
+      <PrivacyProvider>
+        <SpendingTransactionList transactions={MOCK_TXS} accounts={MOCK_ACCOUNTS} />
+      </PrivacyProvider>
+    </ToastProvider>,
   )
 }
 
@@ -49,5 +52,16 @@ describe('SpendingTransactionList', () => {
     expect(screen.getByText('Shell Gas')).toBeInTheDocument()
     expect(screen.getByText('Groceries')).toBeInTheDocument()
     expect(screen.getByText('Transportation')).toBeInTheDocument()
+  })
+})
+
+describe('SpendingTransactionList link', () => {
+  // Task 64 — "View All →" must be a Next <Link> so basePath is applied at
+  // build time for the /personal-FA demo. Raw <a href="/spending"> would 404.
+  it('renders Next Link to /spending (basePath applied by Next at build time)', () => {
+    renderList()
+    const link = screen.getByText(/View All/).closest('a')
+    expect(link).not.toBeNull()
+    expect(link?.getAttribute('href')).toBe('/spending')
   })
 })

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ALL_CATEGORIES } from '@/lib/categories'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type Account = { id: string; name: string }
 type FormState = {
@@ -37,6 +39,7 @@ export function AddTransactionModal({
   const [form, setForm] = useState<FormState>(DEFAULT)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const toast = useToast()
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
@@ -57,6 +60,12 @@ export function AddTransactionModal({
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault()
     if (!validate()) return
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      setForm(DEFAULT)
+      setIsOpen(false)
+      return
+    }
     setIsSubmitting(true)
     const amountCents = Math.round(parseFloat(form.amountStr) * 100) * (form.isPositive ? 1 : -1)
     try {

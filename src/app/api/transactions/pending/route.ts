@@ -1,7 +1,9 @@
 import { TransactionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 export async function GET(): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   try {
     const transactions = await db.transaction.findMany({
       where: { status: TransactionStatus.due },

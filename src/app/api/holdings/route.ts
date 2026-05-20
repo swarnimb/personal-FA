@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const postSchema = z.object({
   accountId: z.string().min(1, 'accountId is required'),
@@ -10,6 +11,7 @@ const postSchema = z.object({
 })
 
 export async function GET(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { searchParams } = new URL(req.url)
   const accountId = searchParams.get('accountId')
   try {
@@ -39,6 +41,7 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   let body: unknown
   try { body = await req.json() } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })

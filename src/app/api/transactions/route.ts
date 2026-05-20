@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { getDateRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
 import { ALL_CATEGORIES } from '@/lib/categories'
 import { generatePendingInstances } from '@/lib/recurrence'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 
 const postSchema = z.object({
@@ -24,6 +25,7 @@ const postSchema = z.object({
 })
 
 export async function GET(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { searchParams } = new URL(req.url)
   const range = searchParams.get('range')
   if (!range || !VALID_RANGES.includes(range as RangeKey)) {
@@ -46,6 +48,7 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   let body: unknown
   try { body = await req.json() } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })

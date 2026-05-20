@@ -86,6 +86,22 @@ describe('IncomeTransactionList', () => {
   })
 })
 
+describe('IncomeTransactionList link', () => {
+  // Task 64 — Next.js <Link> is required so basePath is auto-prepended in the
+  // GitHub Pages demo build. A raw <a href="/..."> would 404 under
+  // /personal-FA/. We assert the rendered anchor href to confirm migration.
+  it('renders Next Link to /transactions?type=income', () => {
+    render(
+      <PrivacyProvider>
+        <IncomeTransactionList transactions={[makeTx()]} />
+      </PrivacyProvider>
+    )
+    const link = screen.getByText('View All Entries').closest('a')
+    expect(link).not.toBeNull()
+    expect(link?.getAttribute('href')).toBe('/transactions?type=income')
+  })
+})
+
 describe('IncomeBarChart', () => {
   // Recharts renders via SVG which jsdom doesn't fully support.
   // We test the toggle buttons render and mode switching.

@@ -1,7 +1,41 @@
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
-import { type RangeKey } from '@/lib/date-range'
+import { getDateRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
 import { INCOME_CATEGORIES } from '@/lib/categories'
+
+/**
+ * Bundle of one dataset per RangeKey. Used by demo-mode pages that bake every
+ * range into the static build so the client selector can toggle between them
+ * without a network roundtrip.
+ */
+export type RangeBundle<T> = Record<RangeKey, T>
+
+/**
+ * Fans out the supplied `fetchOne` over all six RangeKeys in parallel and
+ * returns a `RangeBundle<T>` keyed by RangeKey. Each call receives the
+ * `{ from, to }` computed by `getDateRange(key)` plus the key itself so the
+ * fetcher can branch on `'max'` semantics (year-bucket vs month-bucket).
+ *
+ * All financial aggregation still happens inside the SQL invoked by
+ * `fetchOne` — this helper performs zero JS-side math on monetary values
+ * (CONSTRAINT-02 / CALC-01). Per-page server components call this exactly
+ * once when in demo mode to pre-bake the bundle into the static export.
+ *
+ * Errors from any single range propagate via `Promise.all` rejection
+ * (EH-01 fail-loud) rather than being swallowed — a partial bundle would
+ * silently corrupt the demo UI.
+ */
+export async function getAllRangeData<T>(
+  fetchOne: (from: Date, to: Date, key: RangeKey) => Promise<T>,
+): Promise<RangeBundle<T>> {
+  const entries = await Promise.all(
+    VALID_RANGES.map(async (key) => {
+      const { from, to } = getDateRange(key)
+      return [key, await fetchOne(from, to, key)] as const
+    }),
+  )
+  return Object.fromEntries(entries) as RangeBundle<T>
+}
 
 /**
  * Top-5 spending categories (plus a rolled-up "Other") and total outflow for

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrivacyProvider } from '../../context/PrivacyContext'
+import { ToastProvider } from '../../components/ui/ToastProvider'
 import { PendingBadge } from '../../components/layout/PendingBadge'
 import { PendingReviewPanel, PendingTransaction } from '../../components/transactions/PendingReviewPanel'
 
@@ -30,14 +31,15 @@ const okFetch = (body: unknown) =>
 describe('PendingBadge', () => {
   it('renders null when count is 0', async () => {
     vi.stubGlobal('fetch', okFetch({ data: { count: 0, transactions: [] } }))
-    const { container } = render(<PendingBadge />)
+    render(<ToastProvider><PendingBadge /></ToastProvider>)
     await waitFor(() => expect(fetch).toHaveBeenCalled())
-    expect(container.firstChild).toBeNull()
+    // ToastProvider always renders an aria-live container; assert the badge itself is absent.
+    expect(screen.queryByText(/pending/i)).not.toBeInTheDocument()
   })
 
   it('renders badge when pending > 0', async () => {
     vi.stubGlobal('fetch', okFetch({ data: { count: 1, transactions: [MOCK_TX] } }))
-    render(<PendingBadge />)
+    render(<ToastProvider><PendingBadge /></ToastProvider>)
     await waitFor(() => expect(screen.getByText(/1 pending/i)).toBeInTheDocument())
   })
 })
@@ -47,7 +49,7 @@ describe('PendingReviewPanel', () => {
     const mockFetch = okFetch({ data: {} })
     vi.stubGlobal('fetch', mockFetch)
     const user = userEvent.setup()
-    render(<PrivacyProvider><PendingReviewPanel open transactions={[MOCK_TX]} onClose={vi.fn()} /></PrivacyProvider>)
+    render(<ToastProvider><PrivacyProvider><PendingReviewPanel open transactions={[MOCK_TX]} onClose={vi.fn()} /></PrivacyProvider></ToastProvider>)
     await user.click(screen.getByRole('button', { name: /approve/i }))
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
@@ -61,7 +63,7 @@ describe('PendingReviewPanel', () => {
     const mockFetch = okFetch({ data: {} })
     vi.stubGlobal('fetch', mockFetch)
     const user = userEvent.setup()
-    render(<PrivacyProvider><PendingReviewPanel open transactions={[MOCK_TX]} onClose={vi.fn()} /></PrivacyProvider>)
+    render(<ToastProvider><PrivacyProvider><PendingReviewPanel open transactions={[MOCK_TX]} onClose={vi.fn()} /></PrivacyProvider></ToastProvider>)
     await user.click(screen.getByRole('button', { name: /reject/i }))
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
@@ -75,7 +77,7 @@ describe('PendingReviewPanel', () => {
     vi.stubGlobal('fetch', okFetch({ data: {} }))
     const onClose = vi.fn()
     const user = userEvent.setup()
-    render(<PrivacyProvider><PendingReviewPanel open transactions={[MOCK_TX]} onClose={onClose} /></PrivacyProvider>)
+    render(<ToastProvider><PrivacyProvider><PendingReviewPanel open transactions={[MOCK_TX]} onClose={onClose} /></PrivacyProvider></ToastProvider>)
     await user.click(screen.getByRole('button', { name: /approve/i }))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })

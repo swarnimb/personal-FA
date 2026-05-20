@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 
@@ -64,12 +65,12 @@ export function IncomeTransactionList({ transactions }: { transactions: Transact
         ))}
       </div>
       <div className="px-6 py-4">
-        <a
+        <Link
           href="/transactions?type=income"
           className="font-inter text-sm font-medium text-primary hover:underline"
         >
           View All Entries
-        </a>
+        </Link>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { TransactionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const patchSchema = z.object({
   merchant: z.string().min(1).optional(),
@@ -14,6 +15,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { id } = await params
   let body: unknown
   try { body = await req.json() } catch {
@@ -45,6 +47,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { id } = await params
   try {
     const existing = await db.transaction.findUnique({ where: { id } })

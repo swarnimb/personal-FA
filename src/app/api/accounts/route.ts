@@ -1,7 +1,9 @@
 import { AccountSource } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 export async function GET(): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   try {
     const accounts = await db.account.findMany({
       where: { isActive: true },

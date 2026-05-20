@@ -70,12 +70,12 @@
 | 57 | Mount ToastProvider at `(main)/layout.tsx` root | [x] |
 | 58 | Gate cron registration in `instrumentation.ts` | [x] |
 | 59 | Gate encryption module load + sync entry points | [x] |
-| 60 | No-op wire on all write-action modals + inline category + recurring approve/reject | [ ] |
+| 60 | No-op wire on all write-action modals + inline category + recurring approve/reject | [x] |
 | 61 | Hide TopBar Sync button in demo mode (no-op if no such button) | [ ] |
 | 62 | Static-export config split: `next.config.demo.mjs` + shim | [x] |
-| 63 | Strip `app/api/**` from the static export | [ ] |
-| 64 | basePath audit: fix raw `/` URLs across the codebase | [ ] |
-| 65 | Time-range selector: client-side toggle of pre-baked datasets (all 6 ranges) | [ ] |
+| 63 | Strip `app/api/**` from the static export | [x] |
+| 64 | basePath audit: fix raw `/` URLs across the codebase | [x] |
+| 65 | Time-range selector: client-side toggle of pre-baked datasets (all 6 ranges) | [x] |
 | 66 | Verify seed-demo data + fictional-names audit | [x] |
 | 67 | Favicon fix | [x] |
 | 68 | GitHub Actions workflow `deploy-demo.yml` | [ ] |
@@ -2108,12 +2108,14 @@ the core guarantee is unverified by automation.
 - For the inline category Select in `SpendingTransactionList`: revert the optimistic select value back to original after the toast.
 
 **Acceptance criteria:**
-- [ ] Every listed handler short-circuits with a toast in demo mode and makes zero `fetch()` calls (verified by network-tab check in deployed demo and by unit-test fetch-spy)
-- [ ] Each toast string matches the locked copy table above exactly (no variants, no extra emoji)
-- [ ] Modals close cleanly after the no-op (no stuck "Saving…" state)
-- [ ] V1.0 regression: with demo mode off, every handler still POSTs/PATCHes the same endpoint with the same payload as before
-- [ ] CONSTRAINT-04 ("Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.") preserved — no responsive classes introduced
-- [ ] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") preserved
+- [x] Every listed handler short-circuits with a toast in demo mode and makes zero `fetch()` calls (verified by unit-test fetch-spy — 13/13 tests passing in `demo-gate.test.tsx`; deployed-demo network-tab check rolls up to Task 71)
+- [x] Each toast string matches the locked copy table above exactly (no variants, no extra emoji)
+- [x] Modals close cleanly after the no-op (no stuck "Saving…" state)
+- [x] V1.0 regression: with demo mode off, every handler still POSTs/PATCHes the same endpoint with the same payload as before (existing test files for AddTransactionModal/PendingReviewPanel/CSVImportModal/etc. still pass after orchestrator wrapped them with `<ToastProvider>`)
+- [x] CONSTRAINT-04 ("Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.") preserved — no responsive classes introduced (verified via `git diff` grep over the 10 modified components)
+- [x] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") preserved
+
+**Completed:** 2026-05-19 (Session 22 — Wave 3). Carry-over: `CSVImportModal.tsx` newly exceeds the 200-line CQ-02 component cap (198 → 211); demo-gate insertion overhead. Pre-existing pattern with `sync-simplefin.ts`/`sync-crypto.ts` — accept as carried, refactor candidate post-Demo. Toast key `DEMO_TOAST_COPY.genericModal` still omitted (none of Task 60's handlers needed it). Orchestrator also fixed 4 test files (`accounts.test.tsx`, `investments.test.tsx`, `pending.test.tsx`, `spending.test.tsx`) by wrapping renders with `<ToastProvider>` — collateral of `useToast()` being added to 10 components; pattern set by Task 64's earlier `spending-transactions.test.tsx` fix.
 
 **Tests required:**
 - `describe('AddTransactionModal demo gate')` → `test('shows generic toast and does not fetch in demo mode')`
@@ -2210,10 +2212,12 @@ the core guarantee is unverified by automation.
 - At the top of each handler in `src/app/api/**/route.ts` (23 route files identified in audit), add `if (isDemoMode()) return demoNotFound()`.
 
 **Acceptance criteria:**
-- [ ] `out/api/` does NOT exist after `NEXT_PUBLIC_DEMO_MODE=true npm run build`
-- [ ] Every API handler returns 404 with `{ error: 'demo mode' }` if called in demo mode (defence-in-depth; in practice the routes aren't deployed)
-- [ ] V1.0 regression: with demo mode off, every API handler behaves exactly as before
-- [ ] No new third-party dependency added
+- [~] `out/api/` does NOT exist after `NEXT_PUBLIC_DEMO_MODE=true npm run build` (verifies at Task 71 build; Next 15 `output:'export'` drops API routes by design)
+- [x] Every API handler returns 404 with `{ error: 'demo mode' }` if called in demo mode (defence-in-depth; verified by 3 unit tests in `api-demo-guard.test.ts` + `demo-gate.test.ts`)
+- [x] V1.0 regression: with demo mode off, every API handler behaves exactly as before (guard is `if(isDemoMode()) return demoNotFound()` as first statement; false branch falls through to original handler logic verbatim)
+- [x] No new third-party dependency added
+
+**Completed:** 2026-05-19 (Session 22 — Wave 3). 28 guards inserted across 28 exported handlers in 23 route files (5 files export 2 verbs each). New helper `src/lib/api-demo-guard.ts` (41 lines, `demoNotFound()` 2-line body) re-exports `isDemoMode` for one-line route imports. All under CQ caps.
 
 **Tests required:**
 - `describe('api-demo-guard')` → `test('demoNotFound returns 404 with demo mode error message')`
@@ -2240,10 +2244,12 @@ the core guarantee is unverified by automation.
 - For every hard-coded `fetch('/api/...')` in client components: leave as-is — these only run in V1.0. In demo mode the corresponding handler (Task 60) short-circuits before fetch.
 
 **Acceptance criteria:**
-- [ ] Grep `href="/` across `src/` returns zero matches outside `<Link>` usage
-- [ ] Grep `src="/` (image/script tags) across `src/` returns zero matches outside `next/image` or `assetPath()` calls
-- [ ] On deployed demo at `https://swarnimb.github.io/personal-FA`, clicking "View All →" on any tab navigates correctly with the `/personal-FA` prefix preserved (manual smoke test against deployed URL)
-- [ ] V1.0 regression: local dev navigation between tabs unchanged
+- [x] Grep `href="/` across `src/` returns zero matches outside `<Link>` usage (re-grep post-fix: 3 surviving matches all inside `<Link>` JSX)
+- [x] Grep `src="/` (image/script tags) across `src/` returns zero matches outside `next/image` or `assetPath()` calls (no `src="/...` matches exist anywhere in `src/`; `assetPath()` was NOT added because no raw-img cases exist)
+- [~] On deployed demo at `https://swarnimb.github.io/personal-FA`, clicking "View All →" on any tab navigates correctly with the `/personal-FA` prefix preserved (manual smoke test deferred to Task 71)
+- [x] V1.0 regression: local dev navigation between tabs unchanged (`<Link>` is byte-equivalent to `<a href>` when `basePath` is empty)
+
+**Completed:** 2026-05-19 (Session 22 — Wave 3). Spec listed 3 files; audit-grep confirmed only 2 required edits — `SpendingConcentration.tsx` already used `<Link>` (regression-pinned with test only). `src/lib/demo-mode.ts` unchanged: no raw `<img src="/...">` cases surfaced.
 
 **Tests required:**
 - `describe('SpendingConcentration link')` → `test('renders Next Link to /spending (basePath applied by Next at build time)')`
@@ -2280,12 +2286,14 @@ the core guarantee is unverified by automation.
 - TimeRangeSelector renders all six buttons (YTD, 1M, 3M, 6M, 1Y, Max) unchanged from V1.0 in both modes.
 
 **Acceptance criteria:**
-- [ ] On deployed demo, switching between all 6 ranges (YTD/1M/3M/6M/1Y/Max) is instant — no network request fires (verified by browser Network tab)
-- [ ] All six range datasets are present in the static HTML/JS bundle for each tab
-- [ ] CONSTRAINT-13 ("All financial query functions live in a shared importable module under `src/lib/` — never defined module-private inside a page/route server component.") preserved — `getAllRangeData` and all underlying queries stay in `src/lib/dashboard-queries.ts` and siblings
-- [ ] CONSTRAINT-02 ("All financial calculations in PostgreSQL — never in application code.") preserved — the six datasets are each computed by SQL views/`$queryRaw` calls, not assembled in JS
-- [ ] V1.0 regression: with demo mode off, time-range selector behaves byte-identically to today (URL change → server re-render)
-- [ ] Bundle-size sanity check: each tab's page JS payload increases by less than 400KB gzipped after baking six ranges; if blown, fall back to option (a) pre-rendered routes per range
+- [~] On deployed demo, switching between all 6 ranges (YTD/1M/3M/6M/1Y/Max) is instant — no network request fires (manual verification deferred to Task 71)
+- [~] All six range datasets are present in the static HTML/JS bundle for each tab (verifies at Task 71 build inspection)
+- [x] CONSTRAINT-13 preserved — `getAllRangeData` lives in `src/lib/dashboard-queries.ts`; pre-existing page-private query functions extracted into 4 new sibling modules (`income-queries.ts`, `spending-queries.ts`, `investments-queries.ts`, `net-worth-queries.ts`) during refactor
+- [x] CONSTRAINT-02 preserved — six datasets each computed by `$queryRaw`; `getAllRangeData` only fans out the supplied `fetchOne` via `Promise.all` and `Object.fromEntries` (no JS-side arithmetic on monetary values)
+- [x] V1.0 regression: with demo mode off, time-range selector behaves byte-identically to today (URL change → `router.push` → server re-render; demo-mode is an additive `if(isDemoMode())` branch that falls through to original V1.0 code path)
+- [~] Bundle-size sanity check < 400KB gzipped per tab (verifies at Task 71 build measurement). **Orchestrator flag:** Income and Spending tabs ship transactions arrays per range slice — at-risk for the Max range. If either blows budget, fallback is to drop transactions from those slices and fetch from a small static JSON per range.
+
+**Completed:** 2026-05-19 (Session 22 — Wave 3). Scope expanded with justification: spec listed only `src/lib/dashboard-queries.ts` under `src/lib/`, but 4 sibling `*-queries.ts` modules were created to satisfy CONSTRAINT-13 (pre-existing page-private query functions had to be extracted to expose `fetchOne` callables for the fan-out). 5 new per-page `*RangeView.tsx` client wrappers added so leaf components don't need to convert to client components. All extractions preserve existing exports' names and signatures — Task 54 CALC-01 integration suite imports remain unchanged.
 
 **Tests required:**
 - `describe('getAllRangeData')` → `test('returns all six ranges in parallel')`
