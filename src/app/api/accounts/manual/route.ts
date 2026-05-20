@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { AccountSource, AccountType } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const manualSchema = z.object({
   name: z.string().min(1, 'name is required'),
@@ -9,6 +10,7 @@ const manualSchema = z.object({
 })
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   let body: unknown
   try { body = await req.json() } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })

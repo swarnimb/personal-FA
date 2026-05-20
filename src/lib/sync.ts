@@ -3,6 +3,7 @@ import { db } from './db'
 import { syncSimplefin } from './sync-simplefin'
 import { syncExchange } from './sync-crypto'
 import { markDueRecurring } from './recurrence'
+import { isDemoMode } from './demo-mode'
 
 export type SyncResult = {
   status: SyncStatus
@@ -19,7 +20,25 @@ export async function createSyncLog(): Promise<string> {
   return log.id
 }
 
+function demoNoOpSyncResult(): SyncResult {
+  return {
+    status: SyncStatus.success,
+    transactionsInserted: 0,
+    transactionsUpdated: 0,
+    accountsSynced: 0,
+    errors: ['demo mode'],
+  }
+}
+
+/**
+ * Run the full sync pipeline (SimpleFin → exchanges → recurring).
+ *
+ * In demo mode returns a no-op success result without touching DB,
+ * SimpleFin, Coinbase, or Kraken — the static demo build has no
+ * credentials and no live DB connection. See Task 59.
+ */
 export async function runFullSync(syncLogId?: string): Promise<SyncResult> {
+  if (isDemoMode()) return demoNoOpSyncResult()
   const logId = syncLogId ?? (await createSyncLog())
   const errors: string[] = []
   let transactionsInserted = 0

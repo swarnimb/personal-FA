@@ -116,6 +116,23 @@ describe('SpendingConcentration', () => {
   })
 })
 
+describe('SpendingConcentration link', () => {
+  // Task 64 — Already migrated to Next <Link>; this test pins that behavior
+  // so a future regression to <a href> would fail loudly. basePath is applied
+  // by Next at build time for the /personal-FA demo.
+  it('renders Next Link to /spending (basePath applied by Next at build time)', () => {
+    const sample = [{ category: 'Rent & Housing', totalCents: 320000 }]
+    render(
+      <PrivacyProvider>
+        <SpendingConcentration categories={sample} totalOutflow={320000} />
+      </PrivacyProvider>
+    )
+    const link = screen.getByText('View All').closest('a')
+    expect(link).not.toBeNull()
+    expect(link?.getAttribute('href')).toBe('/spending')
+  })
+})
+
 describe('MonthlyCashFlow', () => {
   const defaultProps = {
     liquidCashEndCents: 1150000,

@@ -1,6 +1,7 @@
 import { AccountSource, AccountType, ExchangeType } from '@prisma/client'
 import { decrypt } from './crypto'
 import { db } from './db'
+import { isDemoMode } from './demo-mode'
 import { fetchCoinbaseBalances } from './coinbase'
 import { fetchKrakenBalances } from './kraken'
 import { appendBalanceSnapshot } from './snapshot'
@@ -47,10 +48,19 @@ async function upsertCryptoAccount(
   return account.id
 }
 
+/**
+ * Sync a single exchange connection (Coinbase / Kraken).
+ *
+ * In demo mode returns a no-op result without touching DB or the
+ * exchange API — the static demo build has no credentials. See Task 59.
+ */
 export async function syncExchange(exchangeConnectionId: string): Promise<{
   accountsUpdated: number
   errors: string[]
 }> {
+  if (isDemoMode()) {
+    return { accountsUpdated: 0, errors: ['demo mode'] }
+  }
   const connection = await db.exchangeConnection.findUnique({
     where: { id: exchangeConnectionId },
   })

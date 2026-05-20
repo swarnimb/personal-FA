@@ -1,11 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ALL_CATEGORIES } from '@/lib/categories'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { AddTransactionModal } from '@/components/transactions/AddTransactionModal'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type Transaction = {
   id: string
@@ -52,12 +55,21 @@ export function SpendingTransactionList({
   const router = useRouter()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [patchError, setPatchError] = useState<string | null>(null)
+  const toast = useToast()
 
   const sorted = [...transactions].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   )
 
   const handleCategoryChange = async (txId: string, category: string) => {
+    if (isDemoMode()) {
+      // Revert the optimistic select value by closing the editor — the
+      // original category button re-renders with the unchanged value.
+      toast.show(DEMO_TOAST_COPY.generic)
+      setEditingId(null)
+      setPatchError(null)
+      return
+    }
     try {
       await patchCategory(txId, category)
       setEditingId(null)
@@ -148,12 +160,12 @@ export function SpendingTransactionList({
             </table>
           </div>
           <div className="px-6 py-3 flex-shrink-0">
-            <a
+            <Link
               href="/spending"
               className="font-inter text-xs text-primary hover:text-primary/80 transition-colors"
             >
               View All →
-            </a>
+            </Link>
           </div>
         </>
       )}

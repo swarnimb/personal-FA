@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrivacyProvider } from '../../context/PrivacyContext'
+import { ToastProvider } from '../../components/ui/ToastProvider'
 import { SyncStatusPanel } from '../../components/accounts/SyncStatusPanel'
 import { ConnectedInstitutions } from '../../components/accounts/ConnectedInstitutions'
 import { ConnectBankModal } from '../../components/accounts/ConnectBankModal'
@@ -37,7 +38,7 @@ const MOCK_ACCOUNT_CARDS = [
 
 describe('SyncStatusPanel', () => {
   it('renders connection counts', () => {
-    render(<SyncStatusPanel activeConnections={3} manualItems={2} lastSyncAt={null} />)
+    render(<ToastProvider><SyncStatusPanel activeConnections={3} manualItems={2} lastSyncAt={null} /></ToastProvider>)
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
@@ -46,12 +47,12 @@ describe('SyncStatusPanel', () => {
 
   it('renders last sync time', () => {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60000).toISOString()
-    render(<SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={fiveMinutesAgo} />)
+    render(<ToastProvider><SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={fiveMinutesAgo} /></ToastProvider>)
     expect(screen.getByText('5m ago')).toBeInTheDocument()
   })
 
   it('renders Refresh All button', () => {
-    render(<SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={null} />)
+    render(<ToastProvider><SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={null} /></ToastProvider>)
     expect(screen.getByRole('button', { name: /refresh all/i })).toBeInTheDocument()
   })
 })
@@ -99,7 +100,7 @@ describe('ConnectBankModal', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(connectPromise))
 
     const user = userEvent.setup()
-    render(<ConnectBankModal />)
+    render(<ToastProvider><ConnectBankModal /></ToastProvider>)
 
     await user.click(screen.getByRole('button', { name: /connect bank account/i }))
     await user.type(screen.getByLabelText(/setup token/i), 'tok_abc123')
@@ -114,7 +115,7 @@ describe('ConnectBankModal', () => {
 describe('AddExchangeModal', () => {
   it('API key and secret fields are type=password', async () => {
     const user = userEvent.setup()
-    render(<AddExchangeModal />)
+    render(<ToastProvider><AddExchangeModal /></ToastProvider>)
 
     await user.click(screen.getByRole('button', { name: /add crypto exchange/i }))
 
@@ -136,7 +137,7 @@ describe('CSVImportModal', () => {
     }))
 
     const user = userEvent.setup()
-    render(<CSVImportModal accounts={MOCK_ALL_ACCOUNTS} />)
+    render(<ToastProvider><CSVImportModal accounts={MOCK_ALL_ACCOUNTS} /></ToastProvider>)
     await user.click(screen.getByRole('button', { name: /import csv/i }))
 
     const file = new File(['Date,Amount,Description\n2026-01-01,-12.50,Coffee'], 'test.csv', { type: 'text/csv' })
@@ -164,7 +165,7 @@ describe('CSVImportModal', () => {
     }))
 
     const user = userEvent.setup()
-    render(<CSVImportModal accounts={MOCK_ALL_ACCOUNTS} />)
+    render(<ToastProvider><CSVImportModal accounts={MOCK_ALL_ACCOUNTS} /></ToastProvider>)
     await user.click(screen.getByRole('button', { name: /import csv/i }))
 
     const csv = 'Date,Amount,Description\n' + previewRows.map((r) => r.cells.join(',')).join('\n')

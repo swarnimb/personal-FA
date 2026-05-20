@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ExchangeType } from '@prisma/client'
 import { encrypt } from '@/lib/crypto'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const addExchangeSchema = z.object({
   exchange: z.enum(['Coinbase', 'Kraken']),
@@ -10,6 +11,7 @@ const addExchangeSchema = z.object({
 })
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   let body: unknown
   try {
     body = await req.json()

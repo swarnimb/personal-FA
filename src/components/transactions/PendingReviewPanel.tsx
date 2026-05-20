@@ -5,6 +5,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { EditPendingModal } from './EditPendingModal'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 export type PendingTransaction = {
   id: string; merchant: string; amountCents: number
@@ -31,6 +33,7 @@ export function PendingReviewPanel({
   const [items, setItems] = useState<PendingTransaction[]>(transactions)
   const [editTarget, setEditTarget] = useState<PendingTransaction | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const toast = useToast()
 
   useEffect(() => { setItems(transactions) }, [transactions])
   useEffect(() => { if (open && items.length === 0) onClose() }, [open, items.length, onClose])
@@ -38,6 +41,10 @@ export function PendingReviewPanel({
   const removeItem = (id: string) => setItems((prev) => prev.filter((t) => t.id !== id))
 
   const handleApprove = async (tx: PendingTransaction) => {
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      return
+    }
     removeItem(tx.id)
     try {
       const res = await fetch(`/api/transactions/${tx.id}/approve`, { method: 'POST' })
@@ -53,6 +60,10 @@ export function PendingReviewPanel({
   }
 
   const handleReject = async (tx: PendingTransaction) => {
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      return
+    }
     removeItem(tx.id)
     try {
       const res = await fetch(`/api/transactions/${tx.id}/reject`, { method: 'POST' })

@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type AccountType = 'Checking' | 'Savings' | 'Investment' | 'Crypto' | 'CreditCard' | 'Loan' | 'Other'
 type FormState = { name: string; type: AccountType | ''; balance: string }
@@ -39,6 +41,7 @@ export function AddManualAccountModal() {
   const [form, setForm] = useState<FormState>(EMPTY)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const toast = useToast()
 
   const set = <K extends keyof FormState>(k: K, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -54,6 +57,12 @@ export function AddManualAccountModal() {
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault()
     if (!validate()) return
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      setForm(EMPTY)
+      setIsOpen(false)
+      return
+    }
     setIsSubmitting(true)
     const currentBalanceCents = Math.round(parseFloat(form.balance) * 100)
     try {

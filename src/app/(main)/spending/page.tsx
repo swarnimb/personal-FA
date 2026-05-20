@@ -1,92 +1,50 @@
-import { Prisma, TransactionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getDateRange, getPreviousPeriodRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
-import { INCOME_CATEGORIES } from '@/lib/categories'
+import { getAllRangeData } from '@/lib/dashboard-queries'
+import {
+  getSpendingBreakdown,
+  getPreviousPeriodSpending,
+  getMonthlyAverageSpending,
+  getSpendingTransactions,
+} from '@/lib/spending-queries'
+import { isDemoMode } from '@/lib/demo-mode'
 import { SpendingMetrics } from '@/components/spending/SpendingMetrics'
 import { SpendingBreakdown } from '@/components/spending/SpendingBreakdown'
 import { SpendingTransactionList } from '@/components/spending/SpendingTransactionList'
+import { RangeDataProvider } from '@/components/layout/RangeDataProvider'
+import { SpendingRangeView, type SpendingRangeSlice } from './SpendingRangeView'
 
-
-type SpendingRow = {
-  category: string
-  totalCents: bigint
-  grandTotal: bigint
-  percentage: number | string
-}
-
-async function getSpendingBreakdown(
+/**
+ * Per-range fetcher for the Spending tab. Reused by both the demo-mode
+ * all-six-range bake and the V1.0 single-range path.
+ */
+async function fetchSpendingSlice(
   from: Date,
   to: Date,
-): Promise<{ totalCents: number; byCategory: { category: string; totalCents: number; percentage: number }[] }> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
-  const rows = await db.$queryRaw<SpendingRow[]>(Prisma.sql`
-    WITH spending AS (
-      SELECT
-        category,
-        SUM(ABS("amountCents")) AS "totalCents"
-      FROM "Transaction"
-      WHERE "amountCents" < 0
-        AND status = 'confirmed'
-        AND category NOT IN (${incomeList})
-        AND date >= ${from}
-        AND date <= ${to}
-      GROUP BY category
-    )
-    SELECT
-      category,
-      "totalCents"::int AS "totalCents",
-      SUM("totalCents") OVER ()::int AS "grandTotal",
-      CASE
-        WHEN SUM("totalCents") OVER () > 0
-        THEN ROUND(100.0 * "totalCents" / SUM("totalCents") OVER (), 2)
-        ELSE 0.0
-      END AS percentage
-    FROM spending
-    ORDER BY "totalCents" DESC
-  `)
-  if (rows.length === 0) return { totalCents: 0, byCategory: [] }
+  range: RangeKey,
+): Promise<SpendingRangeSlice> {
+  const previousRange = getPreviousPeriodRange(range)
+  const [
+    { totalCents, byCategory },
+    transactions,
+    previousPeriodCents,
+    monthlyAverageCents,
+    previousMonthlyAverageCents,
+  ] = await Promise.all([
+    getSpendingBreakdown(from, to),
+    getSpendingTransactions(from, to),
+    getPreviousPeriodSpending(range),
+    getMonthlyAverageSpending(from, to),
+    getMonthlyAverageSpending(previousRange.from, previousRange.to),
+  ])
   return {
-    totalCents: Number(rows[0].grandTotal),
-    byCategory: rows.map((r) => ({
-      category: r.category,
-      totalCents: Number(r.totalCents),
-      percentage: Number(r.percentage),
-    })),
+    totalCents,
+    byCategory,
+    previousPeriodCents,
+    monthlyAverageCents,
+    previousMonthlyAverageCents,
+    transactions,
   }
-}
-
-async function getPreviousPeriodSpending(range: RangeKey): Promise<number> {
-  const { from, to } = getPreviousPeriodRange(range)
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
-  const rows = await db.$queryRaw<{ total: bigint }[]>(Prisma.sql`
-    SELECT COALESCE(SUM(ABS("amountCents")), 0)::int AS total
-    FROM "Transaction"
-    WHERE "amountCents" < 0 AND status = 'confirmed'
-      AND category NOT IN (${incomeList})
-      AND date >= ${from} AND date <= ${to}
-  `)
-  return Number(rows[0]?.total ?? 0)
-}
-
-async function getMonthlyAverageSpending(from: Date, to: Date): Promise<number> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
-  const rows = await db.$queryRaw<{ avg: bigint }[]>(Prisma.sql`
-    SELECT COALESCE(
-      SUM(ABS("amountCents")) /
-        NULLIF(
-          EXTRACT(YEAR FROM AGE(MAX(date)::date, MIN(date)::date)) * 12
-          + EXTRACT(MONTH FROM AGE(MAX(date)::date, MIN(date)::date))
-          + 1,
-          0
-        ),
-      0
-    )::int AS avg
-    FROM "Transaction"
-    WHERE "amountCents" < 0 AND status = 'confirmed'
-      AND category NOT IN (${incomeList})
-      AND date >= ${from} AND date <= ${to}
-  `)
-  return Number(rows[0]?.avg ?? 0)
 }
 
 export default async function SpendingPage({
@@ -94,59 +52,44 @@ export default async function SpendingPage({
 }: {
   searchParams: Promise<{ range?: string }>
 }) {
+  const accounts = await db.account.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+
+  if (isDemoMode()) {
+    const bundle = await getAllRangeData(fetchSpendingSlice)
+    return (
+      <RangeDataProvider initial={bundle}>
+        <SpendingRangeView accounts={accounts} />
+      </RangeDataProvider>
+    )
+  }
+
   const params = await searchParams
   const range: RangeKey = VALID_RANGES.includes(params.range as RangeKey)
     ? (params.range as RangeKey)
     : 'ytd'
   const { from, to } = getDateRange(range)
+  const slice = await fetchSpendingSlice(from, to, range)
 
-  const previousRange = getPreviousPeriodRange(range)
-  const [{ totalCents, byCategory }, transactions, accounts, previousPeriodCents, monthlyAverageCents, previousMonthlyAverageCents] =
-    await Promise.all([
-      getSpendingBreakdown(from, to),
-      db.transaction.findMany({
-        where: {
-          amountCents: { lt: 0 },
-          status: TransactionStatus.confirmed,
-          category: { notIn: INCOME_CATEGORIES },
-          date: { gte: from, lte: to },
-        },
-        orderBy: { date: 'desc' },
-      }),
-      db.account.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-      }),
-      getPreviousPeriodSpending(range),
-      getMonthlyAverageSpending(from, to),
-      getMonthlyAverageSpending(previousRange.from, previousRange.to),
-    ])
-
-  const topCategory = byCategory[0]?.category ?? ''
-  const topCategoryPercent = byCategory[0]?.percentage ?? 0
-
-  const txns = transactions.map((t) => ({
-    id: t.id,
-    date: t.date.toISOString(),
-    merchant: t.merchant,
-    category: t.category,
-    amountCents: t.amountCents,
-  }))
+  const topCategory = slice.byCategory[0]?.category ?? ''
+  const topCategoryPercent = slice.byCategory[0]?.percentage ?? 0
 
   return (
     <div className="flex flex-col gap-4 min-h-full">
       <SpendingMetrics
-        totalCents={totalCents}
-        previousPeriodCents={previousPeriodCents}
-        monthlyAverageCents={monthlyAverageCents}
-        previousMonthlyAverageCents={previousMonthlyAverageCents}
+        totalCents={slice.totalCents}
+        previousPeriodCents={slice.previousPeriodCents}
+        monthlyAverageCents={slice.monthlyAverageCents}
+        previousMonthlyAverageCents={slice.previousMonthlyAverageCents}
         topCategory={topCategory}
         topCategoryPercent={topCategoryPercent}
       />
       <div className="grid grid-cols-2 gap-4">
-        <SpendingBreakdown totalCents={totalCents} byCategory={byCategory} />
-        <SpendingTransactionList transactions={txns} accounts={accounts} />
+        <SpendingBreakdown totalCents={slice.totalCents} byCategory={slice.byCategory} />
+        <SpendingTransactionList transactions={slice.transactions} accounts={accounts} />
       </div>
     </div>
   )

@@ -2,12 +2,14 @@ import { z } from 'zod'
 import { encrypt } from '@/lib/crypto'
 import { db } from '@/lib/db'
 import { exchangeSetupToken } from '@/lib/simplefin'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const connectSchema = z.object({
   setupToken: z.string().min(1, 'setupToken is required'),
 })
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   let body: unknown
   try {
     body = await req.json()

@@ -211,7 +211,7 @@ src/
 | `ENCRYPTION_KEY` | 32-byte hex string in `.env`. Never committed. Loss = re-enter all credentials. |
 | SQL injection | Prisma parameterized queries. `$queryRaw` uses tagged template literals only. |
 | User input validation | Zod schemas on all API route inputs before any DB operation. |
-| LAN exposure | No auth by design (trusted home network). Never expose to public internet. |
+| LAN exposure | (V1.0) No auth by design (trusted home network). Never expose the V1.0 server to the public internet. See § Demo Deployment (Static Export Artifact) below for the demo build, which is a separate static artifact with no API surface and no real credentials. |
 | Secrets in code | None. All configuration via env vars (SEC-01). |
 
 See `docs/founder-brief.md` § FB-03 for the encryption decision record.
@@ -240,3 +240,86 @@ See `docs/founder-brief.md` § FB-03 for the encryption decision record.
 | EH-01: Loud failures with context | All errors thrown/returned with what + where + why |
 | CQ-01: Functions < 50 lines | Enforced at `@code-review` |
 | CQ-02: Components < 200 lines | Enforced at `@code-review` |
+
+---
+
+## Demo Deployment (Static Export Artifact)
+
+> Architectural note recording the binding decisions behind the public demo deployment of AmIBroke. Companion to `docs/architecture.md` § Deployment.
+> Added 2026-05-19.
+
+### Purpose
+
+AmIBroke V1.0 is a single-user, LAN-only finance tracker holding real credentials and real financial data. It is never to be exposed to the public internet. The demo is a separate artifact — a static, read-only showcase derived from fictional seeded data — built to let prospective users browse all 6 tabs at a hosted URL without ever connecting to a real Postgres or holding any real credentials.
+
+### Two-deployment model
+
+| Deployment | Runtime | Data source | Audience | Credentials present |
+|---|---|---|---|---|
+| V1.0 (local) | `npm run dev` / `npm run start`, bound to `0.0.0.0:3000`, server-rendered with live Postgres queries | Local PostgreSQL 18 Windows service | Single user on home LAN | All real credentials |
+| Demo (public) | Pre-rendered static HTML + JS served by GitHub Pages — no runtime server, no runtime DB | Build-time snapshot baked into HTML/JS from `prisma/seed-demo.ts` against a transient Postgres in CI | Anyone with the URL | None |
+
+Demo URL: `https://swarnimb.github.io/personal-FA` (default GitHub Pages path; custom domain optional later).
+Source: `https://github.com/swarnimb/personal-FA`.
+
+### Build pipeline
+
+GitHub Actions workflow `.github/workflows/deploy-demo.yml` does the entire build in CI:
+
+- **Trigger:** push to `main`; also `workflow_dispatch` for manual re-runs.
+- **Steps:**
+  1. Spin up PostgreSQL service via the workflow's `services: postgres:` block.
+  2. `npm ci`.
+  3. `prisma migrate deploy` against the transient DB (creates schema + financial views).
+  4. `tsx prisma/seed-demo.ts` — loads the fictional 5-year dataset (~1500 transactions, 6 accounts, ~1200 snapshots, 1 recurring series).
+  5. Set `NEXT_PUBLIC_DEMO_MODE=true` in the environment; switch Next config to `output: 'export'` (likely via a `next.config.demo.mjs` selected by env var — see code touchpoints).
+  6. `next build` — every server component renders against the seeded Postgres at build time; output is `out/`.
+  7. Deploy `out/` to the `gh-pages` branch via the official `actions/deploy-pages` action (or `peaceiris/actions-gh-pages`).
+- **Serving:** GitHub Pages serves the `gh-pages` branch (or `main /docs`, selectable in Pages settings).
+- **Runtime per deploy:** ~3–5 minutes on the GH Actions free tier.
+
+### Why static is safe here
+
+- **Financial math is honored, not violated.** All financial arithmetic lives in PostgreSQL views and `$queryRaw` (CALC-01 / CONSTRAINT-02). The views need Postgres to run — and they do run, at build time, in the CI Postgres service. The output is HTML with the numbers already baked in. No arithmetic is moved into TypeScript or the client bundle. CALC-01 is honored.
+- **CONSTRAINT-13 made this clean.** Task 53 extracted the data-layer query functions into `src/lib/*-queries.ts` (e.g., `dashboard-queries.ts`). Server components import and `await` them. Under `output: 'export'`, those `await` calls execute during the build, not at request time — the canonical static-export pattern. The architecture did not need to change to enable static; it already supported it.
+- **CONSTRAINT-08 (cron) is honored.** The `NEXT_PUBLIC_DEMO_MODE` gate goes inside `src/instrumentation.ts`. In demo builds the cron is never registered. The constraint that cron lives only in `instrumentation.ts` is preserved.
+- **CONSTRAINT-06 (encryption) is bypassed because nothing to encrypt.** No SimpleFin token, no exchange API keys, no `ENCRYPTION_KEY` exist in the CI environment. The encryption module is not even loaded in demo mode (gated by `NEXT_PUBLIC_DEMO_MODE`).
+- **Time-range selector under static export:** all 6 ranges (YTD/1M/3M/6M/1Y/Max) are baked into the page bundle at build time and switched client-side. No network call on range change. (Decision recorded in plan.md Task 65.)
+- **Add Transaction, Sync, Connect Bank** — all client-side. The no-op + toast pattern (per the approved copy strings) needs no server endpoint and works identically on static.
+
+### What does NOT work on the demo (by design)
+
+- **No real-time data.** Every demo session shows the same baked snapshot. The demo changes only when a new build is deployed.
+- **No API routes at runtime.** Next.js drops `app/api/**` entirely under `output: 'export'`. This is fine because every write path is gated to a no-op + toast in demo mode anyway.
+- **No `next/image` optimization.** Requires `images.unoptimized: true` in `next.config.demo.mjs`.
+- **No middleware.** We don't use any (per CONSTRAINT-03, no auth — nothing to middleware).
+- **No `revalidate`, no `force-dynamic`.** Not used anywhere in the codebase today.
+
+### Boundary preservation
+
+- No real credentials in CI: no `ENCRYPTION_KEY`, no SimpleFin setup token, no Coinbase/Kraken API keys are referenced by the workflow or required by the build (encryption module is gated off by `NEXT_PUBLIC_DEMO_MODE`).
+- No real financial data leaves the host machine. The seed data in `prisma/seed-demo.ts` is fictional and deterministic; it is the only data the public demo can possibly show.
+- No exposure of V1.0 to the public internet. The local PostgreSQL service is never reached by anything outside the LAN. The GitHub Action's transient Postgres is internal to the runner and torn down after each build.
+
+### Resolution of the apparent contradiction
+
+`docs/prd.md` Global Constraints — *"All data local: PostgreSQL on host machine. No cloud services."* — and the architecture's *"Never expose to public internet"* rule both describe **V1.0**: the single-user financial tracker holding real data. Both remain true verbatim.
+
+The demo is a static HTML/JS artifact derived from seeded fictional data, hosted on GitHub Pages. It is *static files on GitHub Pages*, not *AmIBroke V1.0 on the public internet*. The PRD and architecture statements scope to V1.0 and are not violated by serving a separate pre-rendered showcase from a different artifact.
+
+### Code touchpoints
+
+| File | Change |
+|---|---|
+| `src/lib/demo-mode.ts` | New. Single source of truth for `IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'` and helper toasts. |
+| `src/instrumentation.ts` | Wrap cron registration in `if (!IS_DEMO)`. |
+| `src/lib/sync.ts`, `src/lib/sync-simplefin.ts`, `src/lib/sync-crypto.ts` | Gate top-level handlers in `if (!IS_DEMO)` — in demo builds these modules' write paths are no-ops. |
+| `src/lib/crypto.ts` | Module load gated behind `IS_DEMO` check (only loaded when not in demo). |
+| Modal submit handlers (Add Transaction, Add Manual Holding, Add Manual Account, Connect Bank, Add Exchange, CSV Import) | In demo mode: prevent default → fire `<DemoToast>` with the appropriate copy → close modal. |
+| Top-bar Sync button | In demo mode: fire sync toast, do nothing else. |
+| `<DemoBanner>` | New client component. Mounted in `app/(main)/layout.tsx`, gated by `IS_DEMO`. |
+| `<DemoToast>` | New helper that wraps the existing toast system with the three approved copy variants. |
+| `next.config.mjs` → split into `next.config.mjs` + `next.config.demo.mjs` | Demo config sets `output: 'export'`, `images.unoptimized: true`, `basePath: '/personal-FA'`, `trailingSlash: true` (helps with Pages directory routing). |
+| `.github/workflows/deploy-demo.yml` | New. End-to-end build + deploy pipeline. |
+| `README.md` | Rewritten as showcase: hero shot, screenshots, live demo link, one-command local setup. |
+| `public/favicon.ico` | Replaced (fix). |

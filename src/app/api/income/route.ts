@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getDateRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
 import { INCOME_CATEGORIES } from '@/lib/categories'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 
 type IncomeRow = { category: string; totalCents: bigint; grandTotal: bigint }
@@ -39,6 +40,7 @@ async function getIncomeBreakdown(
 }
 
 export async function GET(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { searchParams } = new URL(req.url)
   const range = searchParams.get('range')
   if (!range || !VALID_RANGES.includes(range as RangeKey)) {

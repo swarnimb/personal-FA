@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ALL_CATEGORIES } from '@/lib/categories'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type PendingTx = { id: string; merchant: string; amountCents: number; scheduledDate: string; category: string }
 type EditForm = { date: string; amountStr: string; isPositive: boolean; merchant: string; category: string; notes: string }
@@ -42,6 +44,7 @@ export function EditPendingModal({
   const [form, setForm] = useState<EditForm>(() => txToForm(transaction))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   useEffect(() => { if (open) setForm(txToForm(transaction)) }, [open, transaction])
 
@@ -49,6 +52,11 @@ export function EditPendingModal({
 
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault()
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      onOpenChange(false)
+      return
+    }
     setSubmitting(true)
     setError(null)
     const amountCents = Math.round(parseFloat(form.amountStr) * 100) * (form.isPositive ? 1 : -1)

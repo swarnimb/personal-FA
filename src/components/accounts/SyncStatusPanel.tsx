@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 /**
  * Sync status summary panel showing connection counts, last update time,
@@ -20,8 +22,13 @@ export function SyncStatusPanel({
 }) {
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
+  const toast = useToast()
 
   const handleRefresh = async () => {
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.sync)
+      return
+    }
     setSyncing(true)
     try {
       await fetch('/api/sync', { method: 'POST' })

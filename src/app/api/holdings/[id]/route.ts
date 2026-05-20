@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const patchSchema = z.object({
   symbol: z.string().optional(),
@@ -12,6 +13,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { id } = await params
   let body: unknown
   try { body = await req.json() } catch {
@@ -36,6 +38,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { id } = await params
   try {
     const existing = await db.holding.findUnique({ where: { id } })

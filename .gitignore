@@ -49,3 +49,7 @@ qa-task52-dashboard-ytd.png
 
 # Security audit (local only)
 codex-security-audit.md
+docs/security-report.md
+
+# Test output artifacts
+*.log

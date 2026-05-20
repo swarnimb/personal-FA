@@ -1,9 +1,11 @@
 import { db } from '@/lib/db'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const { id } = await params
 
   const connection = await db.exchangeConnection.findUnique({ where: { id } })

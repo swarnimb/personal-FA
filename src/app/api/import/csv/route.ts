@@ -1,8 +1,10 @@
 import { parseCSV } from '@/lib/csv'
+import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024
 
 export async function POST(req: Request): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
   const contentType = req.headers.get('content-type') ?? ''
   if (!contentType.includes('multipart/form-data')) {
     return Response.json({ error: 'Request must be multipart/form-data' }, { status: 400 })

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type FormState = {
   symbol: string
@@ -37,6 +39,7 @@ export function AddManualHoldingModal({
   const [form, setForm] = useState<FormState>(EMPTY)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const toast = useToast()
 
   const set = <K extends keyof FormState>(k: K, v: string) =>
     setForm((f) => ({ ...f, [k]: v }))
@@ -53,6 +56,12 @@ export function AddManualHoldingModal({
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault()
     if (!validate()) return
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      setForm(EMPTY)
+      setIsOpen(false)
+      return
+    }
     setIsSubmitting(true)
     const marketValueCents = Math.round(parseFloat(form.currentValue) * 100)
     try {

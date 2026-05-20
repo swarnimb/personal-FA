@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddTransactionModal } from '../../components/transactions/AddTransactionModal'
+import { ToastProvider } from '../../components/ui/ToastProvider'
 
 // Radix UI requires these pointer/scroll APIs that jsdom does not implement
 beforeAll(() => {
@@ -21,7 +22,11 @@ afterEach(() => {
 
 async function openModal() {
   const user = userEvent.setup()
-  render(<AddTransactionModal onSuccess={vi.fn()} accounts={MOCK_ACCOUNTS} />)
+  render(
+    <ToastProvider>
+      <AddTransactionModal onSuccess={vi.fn()} accounts={MOCK_ACCOUNTS} />
+    </ToastProvider>,
+  )
   await user.click(screen.getByRole('button', { name: /add transaction/i }))
   return user
 }
@@ -58,7 +63,11 @@ describe('AddTransactionModal', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
 
     const user = userEvent.setup()
-    render(<AddTransactionModal onSuccess={vi.fn()} accounts={MOCK_ACCOUNTS} />)
+    render(
+      <ToastProvider>
+        <AddTransactionModal onSuccess={vi.fn()} accounts={MOCK_ACCOUNTS} />
+      </ToastProvider>,
+    )
     await user.click(screen.getByRole('button', { name: /add transaction/i }))
 
     await user.type(screen.getByLabelText('Amount'), '50')
