@@ -1,3 +1,4 @@
+import { DemoBanner } from "@/components/layout/DemoBanner"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
 import { PrivacyProvider } from "@/context/PrivacyContext"
@@ -10,6 +11,7 @@ export default function MainLayout({
   return (
     <PrivacyProvider>
       <div className="flex flex-col h-screen bg-surface overflow-hidden">
+        <DemoBanner />
         <TopBar />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar />

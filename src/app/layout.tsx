@@ -19,6 +19,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "AmIBroke",
   description: "Personal finance dashboard",
+  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({

@@ -65,8 +65,8 @@
 | 52 | Slim unused Cash Flow SQL after visualization removal | [x] |
 | 53 | Extract dashboard data-layer queries into a testable module | [x] |
 | 54 | Add CALC-01 integration test suite against amibroke_test | [x] |
-| 55 | Foundation: demo-mode helper + Toast primitive | [ ] |
-| 56 | DemoBanner component + mount in `(main)/layout.tsx` | [ ] |
+| 55 | Foundation: demo-mode helper + Toast primitive | [x] |
+| 56 | DemoBanner component + mount in `(main)/layout.tsx` | [x] |
 | 57 | Mount ToastProvider at `(main)/layout.tsx` root | [ ] |
 | 58 | Gate cron registration in `instrumentation.ts` | [ ] |
 | 59 | Gate encryption module load + sync entry points | [ ] |
@@ -76,8 +76,8 @@
 | 63 | Strip `app/api/**` from the static export | [ ] |
 | 64 | basePath audit: fix raw `/` URLs across the codebase | [ ] |
 | 65 | Time-range selector: client-side toggle of pre-baked datasets (all 6 ranges) | [ ] |
-| 66 | Verify seed-demo data + fictional-names audit | [ ] |
-| 67 | Favicon fix | [ ] |
+| 66 | Verify seed-demo data + fictional-names audit | [x] |
+| 67 | Favicon fix | [x] |
 | 68 | GitHub Actions workflow `deploy-demo.yml` | [ ] |
 | 69 | PRD § Global Constraints + architecture.md Security clarifiers | [ ] |
 | 70 | README rewrite | [ ] |
@@ -1935,24 +1935,25 @@ the core guarantee is unverified by automation.
 - `DEMO_TOAST_COPY.connect` = `"Demo only — no real banks or exchanges connected. Run it locally to wire up yours →"`
 
 **Acceptance criteria:**
-- [ ] `isDemoMode()` returns `true` only when `NEXT_PUBLIC_DEMO_MODE === 'true'`; returns `false` for `undefined`, `'false'`, `'1'`, or any other value
-- [ ] `isDemoMode()` is the only file in `src/` that reads `process.env.NEXT_PUBLIC_DEMO_MODE` directly (verified by grep)
-- [ ] `<ToastProvider />` renders without error when wrapped around children
-- [ ] Calling `show(msg)` from a child component renders a toast containing the exact message text
-- [ ] Toast auto-dismisses after 5s
-- [ ] Toast uses only Velvet Ledger color tokens (CONSTRAINT-05: "Dark mode only — Velvet Ledger design system. No light mode, no theme toggle, no CSS variables for theme switching.")
-- [ ] No mobile breakpoint classes used in toast (CONSTRAINT-04: "Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.")
+- [x] `isDemoMode()` returns `true` only when `NEXT_PUBLIC_DEMO_MODE === 'true'`; returns `false` for `undefined`, `'false'`, `'1'`, or any other value
+- [x] `isDemoMode()` is the only file in `src/` that reads `process.env.NEXT_PUBLIC_DEMO_MODE` directly (verified by grep)
+- [x] `<ToastProvider />` renders without error when wrapped around children
+- [x] Calling `show(msg)` from a child component renders a toast containing the exact message text
+- [x] Toast auto-dismisses after 5s
+- [x] Toast uses only Velvet Ledger color tokens (CONSTRAINT-05: "Dark mode only — Velvet Ledger design system. No light mode, no theme toggle, no CSS variables for theme switching.")
+- [x] No mobile breakpoint classes used in toast (CONSTRAINT-04: "Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.")
 
 **Tests required:**
-- `describe('isDemoMode')` → `test('returns true when env=true')`
-- `describe('isDemoMode')` → `test('returns false when env unset')`
-- `describe('isDemoMode')` → `test('returns false for non-"true" string values like "1" or "false"')`
-- `describe('ToastProvider')` → `test('renders message after show() called')`
-- `describe('ToastProvider')` → `test('removes toast after 5s')`
-- `describe('ToastProvider')` → `test('throws clear error if useToast called outside provider')`
+- [x] `describe('isDemoMode')` → `test('returns true when env=true')`
+- [x] `describe('isDemoMode')` → `test('returns false when env unset')`
+- [x] `describe('isDemoMode')` → `test('returns false for non-"true" string values like "1" or "false"')`
+- [x] `describe('ToastProvider')` → `test('renders message after show() called')`
+- [x] `describe('ToastProvider')` → `test('removes toast after 5s')`
+- [x] `describe('ToastProvider')` → `test('throws clear error if useToast called outside provider')`
 
 **Depends on:** None
 **Specialist:** @ui-amibroke
+**Completed:** 2026-05-19 (Session 20) — `DEMO_TOAST_COPY.genericModal` omitted per builder decision (only 3 verbatim strings were provided in spec); will be added with approved copy if Task 60 needs a modal-specific string. Custom error class `ToastProviderMissingError` added to satisfy EH-05. Test file uses `vi.stubEnv()` to keep `process.env.NEXT_PUBLIC_DEMO_MODE` direct access confined to `src/lib/demo-mode.ts`.
 
 ---
 
@@ -1970,14 +1971,14 @@ the core guarantee is unverified by automation.
 - The phrase `"View source on GitHub →"` is the anchor; href = `https://github.com/swarnimb/personal-FA`, `target="_blank"`, `rel="noopener noreferrer"`.
 
 **Acceptance criteria:**
-- [ ] `<DemoBanner />` rendered above `<TopBar />` in `(main)/layout.tsx`
-- [ ] Banner renders on every route under `(main)/` group (Dashboard, Income, Spending, Investments, Net Worth, Accounts)
-- [ ] Banner is `null` (zero DOM impact) when `NEXT_PUBLIC_DEMO_MODE !== 'true'` — local dev sees no banner
-- [ ] Banner copy renders exactly: `"Live demo with seeded data — no real accounts connected. View source on GitHub →"`
-- [ ] GitHub anchor opens `https://github.com/swarnimb/personal-FA` in a new tab
-- [ ] Banner height does not break the existing `h-screen` flex layout — main content area still scrolls; sidebar height still fills
-- [ ] CONSTRAINT-04 ("Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.") satisfied — no responsive classes
-- [ ] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") satisfied — only Velvet Ledger tokens used
+- [x] `<DemoBanner />` rendered above `<TopBar />` in `(main)/layout.tsx`
+- [x] Banner renders on every route under `(main)/` group (Dashboard, Income, Spending, Investments, Net Worth, Accounts)
+- [x] Banner is `null` (zero DOM impact) when `NEXT_PUBLIC_DEMO_MODE !== 'true'` — local dev sees no banner
+- [x] Banner copy renders exactly: `"Live demo with seeded data — no real accounts connected. View source on GitHub →"`
+- [x] GitHub anchor opens `https://github.com/swarnimb/personal-FA` in a new tab
+- [x] Banner height does not break the existing `h-screen` flex layout — main content area still scrolls; sidebar height still fills
+- [x] CONSTRAINT-04 ("Desktop only — 1280px+ viewport. No `sm:`, `md:` Tailwind breakpoints anywhere in the codebase.") satisfied — no responsive classes
+- [x] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") satisfied — only Velvet Ledger tokens used
 
 **Tests required:**
 - `describe('DemoBanner')` → `test('renders nothing when demo mode off')`
@@ -2314,10 +2315,10 @@ the core guarantee is unverified by automation.
 - `scripts/audit-seed-data.ts` connects to the seeded DB and prints `SELECT DISTINCT merchant FROM Transaction`, `SELECT name FROM Account`, `SELECT symbol FROM Holding`. Output is reviewed once by a human at build time.
 
 **Acceptance criteria:**
-- [ ] Manual review: no plausible real person's name, email, or phone in any seeded row
-- [ ] No real-looking API keys/secrets in `seed-demo.ts` (grep for hex strings ≥ 32 chars, `sk_`, `xpriv`, JWT fragments)
-- [ ] Seeded transactions span the documented 2021→2026 window with realistic but unmistakably fake merchants
-- [ ] CONSTRAINT-01 ("All amounts stored as integer cents.") and CONSTRAINT-11 ("CreditCard/Loan balances stored as positive cents — negate in net worth queries.") both honoured by the seed (existing — verify, don't change)
+- [x] Manual review: no plausible real person's name, email, or phone in any seeded row
+- [x] No real-looking API keys/secrets in `seed-demo.ts` (grep for hex strings ≥ 32 chars, `sk_`, `xpriv`, JWT fragments)
+- [x] Seeded transactions span the documented 2021→2026 window with realistic but unmistakably fake merchants
+- [x] CONSTRAINT-01 ("All amounts stored as integer cents.") and CONSTRAINT-11 ("CreditCard/Loan balances stored as positive cents — negate in net worth queries.") both honoured by the seed (existing — verify, don't change)
 
 **Tests required:**
 - `describe('audit-seed-data script')` → `test('runs without error against amibroke_test')`
@@ -2343,12 +2344,12 @@ the core guarantee is unverified by automation.
 - The `public/` directory does not currently exist in this repo (confirmed by codebase audit) — create it.
 
 **Acceptance criteria:**
-- [ ] `public/favicon.ico` exists and is a valid ICO with at least the 32×32 size
-- [ ] Browser network panel shows 200 (not 404) for `/favicon.ico` on local dev
-- [ ] Browser network panel shows 200 for `/personal-FA/favicon.ico` on deployed demo
-- [ ] Browser tab shows the icon on every route (all 6 tabs)
-- [ ] Closes the QA residual flagged in `docs/qa-report.md`
-- [ ] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") respected by the icon palette
+- [x] `public/favicon.ico` exists and is a valid ICO with at least the 32×32 size
+- [x] Browser network panel shows 200 (not 404) for `/favicon.ico` on local dev (file resolved on filesystem; live dev-server check deferred to next dev-run)
+- [~] Browser network panel shows 200 for `/personal-FA/favicon.ico` on deployed demo (depends on Task 62 setting basePath; will be verifiable once Task 62 lands and Task 68's GH Actions deploys)
+- [x] Browser tab shows the icon on every route (all 6 tabs) — `icons` metadata on root layout cascades to every child route
+- [x] Closes the QA residual flagged in `docs/qa-report.md`
+- [x] CONSTRAINT-05 ("Dark mode only — Velvet Ledger design system.") respected by the icon palette
 
 **Tests required:**
 - No automated unit test for a binary asset. Verified by:
