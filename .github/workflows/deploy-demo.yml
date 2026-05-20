@@ -96,6 +96,25 @@ jobs:
       - name: Seed demo data
         run: npx tsx prisma/seed-demo.ts
 
+      # Physically remove src/app/api/ from the tree before building.
+      # Next.js `output: 'export'` inspects route-handler exports at build
+      # time and aborts on (a) dynamic [id] segments without
+      # generateStaticParams() and (b) handlers without
+      # `dynamic = 'force-static'`. The runtime isDemoMode() guard inside
+      # each handler runs too late — Next.js never reaches handler code
+      # during build. Stash now; CI container is torn down after the job
+      # so no restore is needed. Local `npm run dev --demo` is unaffected
+      # because that command runs the JIT dev server, which does not
+      # enforce the static-export contract.
+      - name: Stash API routes (incompatible with static export)
+        run: |
+          if [ -d src/app/api ]; then
+            mv src/app/api /tmp/api-stash
+            echo "Stashed $(find /tmp/api-stash -name 'route.ts' | wc -l) route handler files"
+          else
+            echo "No src/app/api directory to stash"
+          fi
+
       # NEXT_PUBLIC_DEMO_MODE=true triggers the next.config.mjs shim to load
       # next.config.demo.mjs (output:'export', basePath:'/personal-FA',
       # trailingSlash:true). Produces ./out/ instead of ./.next/.

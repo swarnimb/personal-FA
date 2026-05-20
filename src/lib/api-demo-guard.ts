@@ -6,17 +6,26 @@
  * if (isDemoMode()) return demoNotFound()
  * ```
  *
- * This is belt-and-braces defence-in-depth. Next.js 15 `output: 'export'`
- * already refuses to emit API routes into `out/`, so in the deployed
- * GitHub Pages demo build these handlers do not exist as endpoints at
- * all. The guard exists for two reasons:
+ * Build-time behaviour (deployed GitHub Pages demo):
+ *   `src/app/api/` is physically removed from the tree by the deploy
+ *   workflow before `next build` runs (see `.github/workflows/deploy-demo.yml`,
+ *   step "Stash API routes (incompatible with static export)"). API
+ *   handlers do not exist in the static export at all. The original
+ *   assumption that `output: 'export'` silently skips API routes was
+ *   wrong — it instead fails the build, which is why the stash step
+ *   exists. See Session 23 session-log for the diagnosis.
  *
- *  1. If any in-process code path (e.g. a server component accidentally
- *     calling an internal API function it shouldn't) hits a handler in
- *     a demo build, we short-circuit cleanly with a 404 instead of
- *     touching the (absent) DB layer.
- *  2. It makes the demo-mode contract explicit at every entry point —
- *     readers don't have to remember the build-tool guarantee.
+ * Runtime behaviour (everywhere else this code runs):
+ *   The handlers DO exist and DO get hit. This guard short-circuits to
+ *   a 404 when `NEXT_PUBLIC_DEMO_MODE=true`. Relevant in two scenarios:
+ *
+ *   1. Local demo dev (`NEXT_PUBLIC_DEMO_MODE=true npm run dev`) — the
+ *      JIT dev server does not enforce the static-export contract, so
+ *      routes are reachable. Without this guard a demo dev run could
+ *      mutate the DB.
+ *   2. Future non-static deployments (e.g. Vercel with the demo flag
+ *      set) — same reasoning. The guard makes the demo-mode contract
+ *      explicit at every entry point.
  *
  * See Task 63 in `docs/plan.md` and the precedent in `src/instrumentation.ts`.
  */
