@@ -84,7 +84,12 @@ export async function runSeedAudit(prisma?: PrismaClient): Promise<SeedAuditRepo
     return {
       merchants: merchantRows.map((r) => r.merchant),
       accountNames: accountRows.map((r) => r.name),
-      holdingSymbols: holdingRows.map((r) => r.symbol),
+      // Holding.symbol is nullable in the schema (manual holdings without a
+      // ticker). The audit's purpose is to surface real-looking identifiers
+      // for eyeball review; null isn't a string to eyeball, so filter it out.
+      holdingSymbols: holdingRows
+        .map((r) => r.symbol)
+        .filter((s): s is string => s !== null),
     }
   } catch (cause) {
     throw new SeedAuditError(

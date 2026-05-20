@@ -16,6 +16,7 @@ describe('SpendingMetrics', () => {
         totalCents={500000}
         previousPeriodCents={400000}
         monthlyAverageCents={125000}
+        previousMonthlyAverageCents={100000}
         topCategory="Groceries"
         topCategoryPercent={35}
       />
@@ -31,6 +32,7 @@ describe('SpendingMetrics', () => {
         totalCents={500000}
         previousPeriodCents={400000}
         monthlyAverageCents={125000}
+        previousMonthlyAverageCents={100000}
         topCategory="Groceries"
         topCategoryPercent={35}
       />
@@ -45,6 +47,7 @@ describe('SpendingMetrics', () => {
         totalCents={500000}
         previousPeriodCents={400000}
         monthlyAverageCents={125000}
+        previousMonthlyAverageCents={100000}
         topCategory="Groceries"
         topCategoryPercent={35}
       />
