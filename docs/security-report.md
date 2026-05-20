@@ -1,7 +1,7 @@
 # Security Report: AmIBroke Finance Tracker
 
-**Last audit:** 2026-05-19
-**Scope:** Task 59 (Session 21 Wave 2) — demo-mode gate hardening:
+**Last audit:** 2026-05-19 (Task 68 — Wave 5, single-file scope) — see § Task 68 Audit at bottom.
+**Prior audit (still in force):** 2026-05-19 (Task 59 — Wave 2) — demo-mode gate hardening:
 - `src/lib/crypto.ts` (module-load `ENCRYPTION_KEY` gate + defence-in-depth throws in `encrypt()` / `decrypt()`)
 - `src/lib/sync.ts` (`runFullSync` demo gate)
 - `src/lib/sync-simplefin.ts` (`syncSimplefin` demo gate)
@@ -11,7 +11,7 @@
 - `src/__tests__/lib/sync-demo-gate.test.ts`
 **Status:** CLEAR
 
-**Summary:** 0 Critical / 0 High / 0 Medium / 4 Low
+**Running total:** 0 Critical / 0 High / 0 Medium / 5 Low
 
 **Unresolved Critical/High findings:** None
 
@@ -64,4 +64,45 @@
 ## Notes on items deliberately NOT flagged
 
 - **Function-length over-cap (`syncSimplefin` 72 lines, `syncExchange` 56 lines):** Code-quality concern (CQ-01), not security. Both functions are read clean — gates are the very first statement, secret handling is delegated to `decrypt()` which is itself gated. No security logic is hidden by the length. Not flagged.
-- **`encrypt()` callers in API routes not gated for demo mode:** The static demo build (`next.config.demo.mjs` → `output: 'export'`) does not serve API routes — they are excluded from the export. Therefore the routes cannot be invoked in demo mode and do not need a gate. If a future change ever introduces a hybrid build that DOES serve API routes in demo mode, these two routes would need gates too — surfaced here as a watch-item for any future architecture change, not a current finding.
+- **`encrypt()` callers in API routes not gated for demo mode:** The static demo build (`next.config.demo.mjs` → `output: 'export'`) does not serve API routes — they are excluded from the export. Therefore the routes cannot be invoked in demo mode and do not need a gate. If a future change ever introduces a hybrid build that DOES serve API routes in demo mode, these two routes would need gates too — surfaced here as a watch-item for any future architecture change, not a current finding. **Wave 3 update (Task 63):** All 28 API handlers now also carry an `if (isDemoMode()) return demoNotFound()` belt-and-braces guard via `src/lib/api-demo-guard.ts`, so even a hybrid-build accident would short-circuit at the handler level.
+
+---
+
+## Task 68 Audit (Session 22 — Wave 5)
+
+**Last audit:** 2026-05-19
+**Scope:** `.github/workflows/deploy-demo.yml` (NEW) — GitHub Actions deploy workflow for the static demo artifact.
+**Status:** CLEAR
+
+**Summary:** 0 Critical / 0 High / 0 Medium / 1 Low (new) — running total: 0 Critical / 0 High / 0 Medium / 5 Low.
+
+### AC verdicts (Task 68)
+
+1. **No secrets exposed in any step's log output:** PASS. Zero `echo $`, `printenv`, `cat .env`, or step-level `env` invocations. The only `env:` keys are valid YAML map entries on `services.postgres` and the job env.
+2. **`ENCRYPTION_KEY` not set anywhere:** PASS. Single grep hit is the comment at L57 explicitly noting it is intentionally NOT set (Task 59 demo gate eliminated the requirement).
+3. **Concurrency policy prevents simultaneous deploys:** PASS. `concurrency: { group: pages, cancel-in-progress: false }` — a queued push waits for an in-flight deploy to finish rather than killing it mid-upload.
+4. **Database name is `amibroke_demo`:** PASS. Both `POSTGRES_DB: amibroke_demo` and `DATABASE_URL=...localhost:5432/amibroke_demo`. No collision with V1.0 `amibroke` or integration-suite `amibroke_test`.
+5. **Permissions block is minimum-required:** PASS. Exactly `contents: read`, `pages: write`, `id-token: write`. No `write-all`, no job-level override.
+6. **Workflow is valid YAML:** PASS. Parsed by PyYAML (`python -c "import yaml; yaml.safe_load(...)"`); structure validates programmatically (triggers, permissions, concurrency, jobs all materialise correctly).
+7. **Manual setup step documented in file:** PASS. Header comment (L4-8) explicitly notes "Before the first deploy lands, the repo Settings → Pages source must be set to 'GitHub Actions'".
+
+### Additional security checks
+
+8. **Action version pinning:** PASS for major-tag pinning (spec requirement). See LOW-05 below for SHA-pin hardening note.
+9. **Postgres password hygiene:** PASS. Literal `postgres` on ephemeral service container, never referenced as a secret elsewhere.
+10. **`GITHUB_TOKEN` over-scope:** PASS. No `write-all`; only the three Pages-deploy scopes.
+11. **Step-injection vectors:** PASS. Zero `${{ github.event.* }}` interpolation; the only expression is `${{ steps.deployment.outputs.page_url }}` (trusted internal output).
+12. **Trigger surface:** PASS. Only `push: branches: [main]` and `workflow_dispatch`. No `pull_request`, no `workflow_call`, no `issue_comment`.
+13. **Service-container exposure:** PASS. Port 5432 on ephemeral runner localhost only; runner is teardown per job and not externally addressable.
+14. **Cache poisoning via `cache: 'npm'`:** PASS. Cache key derived from `package-lock.json` hash by the action; no untrusted lock file is checked in via this workflow's trigger surface.
+15. **`prisma migrate deploy` not `migrate dev`:** PASS. Production-safe variant, no schema-modify prompts.
+16. **`seed-demo.ts` safety:** PASS. Zero `fetch`/`http`/`axios`/`process.env`/external API calls; zero writes to `SimplefinConnection`/`ExchangeConnection`/`encryptedAccessUrl`/`encryptedApiKey`/`encrypt(`. Deterministic PRNG seed=42. Fictional data only (consistent with ¶5 above).
+17. **CONSTRAINT-13 regression:** N/A — workflow doesn't restructure `src/lib/*-queries.ts`; `npm run build` consumes existing extracted modules.
+18. **CONSTRAINT-06 demo-gate preservation:** PASS. Workflow sets `NEXT_PUBLIC_DEMO_MODE: 'true'` and never sets `ENCRYPTION_KEY`. The `next.config.mjs` shim switches to `next.config.demo.mjs` (static export — excludes API routes). `src/lib/crypto.ts` IIFE returns `KEY=null`; both `encrypt`/`decrypt` throw if reached. Defence-in-depth intact at three layers (sync entry, encrypt module, static-export route exclusion + Task 63 belt-and-braces handler guard).
+
+### LOW-05: Action pinning by major tag, not full SHA (new)
+
+**Rule:** Best-practice hardening note. No SEC-XX rule violated.
+**What it is:** `actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-pages-artifact@v3`, `actions/deploy-pages@v4` pin to a major-version tag, not a 40-character commit SHA. Task 68 spec explicitly required major-tag pinning, so this matches spec.
+**What could go wrong:** If a `v4` tag on an `actions/*` repo were force-moved to a malicious commit (very unlikely on the official `actions/` org), a future workflow run would consume new code silently. Not exploitable in any practical scenario for official `actions/*` repositories.
+**How to fix it (when convenient):** Pin to full SHA (e.g., `actions/checkout@<40-char-sha>`) with Renovate or Dependabot configured to bump them on official release. Non-blocking — defer to future hardening pass.

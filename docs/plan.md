@@ -78,7 +78,7 @@
 | 65 | Time-range selector: client-side toggle of pre-baked datasets (all 6 ranges) | [x] |
 | 66 | Verify seed-demo data + fictional-names audit | [x] |
 | 67 | Favicon fix | [x] |
-| 68 | GitHub Actions workflow `deploy-demo.yml` | [ ] |
+| 68 | GitHub Actions workflow `deploy-demo.yml` | [x] |
 | 69 | PRD § Global Constraints + architecture.md Security clarifiers | [x] |
 | 70 | README rewrite | [ ] |
 | 71 | V1.0 regression sweep + QA gate | [ ] |
@@ -2394,14 +2394,16 @@ the core guarantee is unverified by automation.
 - Add a `pg_isready` wait loop before `prisma migrate deploy` to prevent flaky first-runs while Postgres warms up.
 
 **Acceptance criteria:**
-- [ ] Workflow file is valid YAML (`actionlint` or GitHub's own validation passes)
-- [ ] On first push to `main` after merge, workflow runs to completion in under 6 minutes (PRD §14 AC)
-- [ ] Deployed URL `https://swarnimb.github.io/personal-FA` serves the Dashboard within 2s first paint
-- [ ] No secrets exposed in any step's log output (no `echo $ENCRYPTION_KEY`, no `printenv`)
-- [ ] `ENCRYPTION_KEY` is NOT set in the workflow env (verified — Task 59 makes it unnecessary in demo mode)
-- [ ] Concurrency policy prevents two simultaneous deploys
-- [ ] All seeded data uses `amibroke_demo` DB name (not `amibroke` or `amibroke_test` — keeps the integration suite untouched)
-- [ ] **Manual setup step (PR description):** Before the first deploy, repo Settings → Pages must be flipped to source = "GitHub Actions" (not the legacy gh-pages branch source).
+- [x] Workflow file is valid YAML (verified by `python -c "import yaml; yaml.safe_load(open('.github/workflows/deploy-demo.yml'))"` via `@security` audit — parses cleanly; top-level keys all materialise correctly)
+- [~] On first push to `main` after merge, workflow runs to completion in under 6 minutes (PRD §14 AC) — verifies at Task 71 first deploy
+- [~] Deployed URL `https://swarnimb.github.io/personal-FA` serves the Dashboard within 2s first paint — verifies at Task 71
+- [x] No secrets exposed in any step's log output (verified by `@security` audit: zero `echo $`, `printenv`, `cat .env`, step-level `env`)
+- [x] `ENCRYPTION_KEY` is NOT set in the workflow env (verified — Task 59 makes it unnecessary in demo mode; the only ENCRYPTION_KEY grep hit is the comment at L57 noting its deliberate absence)
+- [x] Concurrency policy prevents two simultaneous deploys (`concurrency: { group: pages, cancel-in-progress: false }`)
+- [x] All seeded data uses `amibroke_demo` DB name (`POSTGRES_DB: amibroke_demo` and `DATABASE_URL=...localhost:5432/amibroke_demo`; no collision with `amibroke` or `amibroke_test`)
+- [ ] **Manual setup step (PR description):** Before the first deploy, repo Settings → Pages must be flipped to source = "GitHub Actions" (not the legacy gh-pages branch source). **Carries to PR description — do NOT flip yet.**
+
+**Completed:** 2026-05-19 (Session 22 — Wave 5). `@security` audit CLEAR (1 new LOW-05: action pinning by major tag vs full SHA — non-blocking, spec required major-tag pinning). Workflow includes a header comment documenting the manual Settings → Pages flip requirement so the PR-description note has a code-level anchor. Defence-in-depth verified at three layers: sync-entry gate (Task 59), encrypt module gate (Task 59), and static-export route exclusion (Task 62) + Task 63's belt-and-braces handler guards.
 
 **Tests required:**
 - No automated test possible. AC verified by:
