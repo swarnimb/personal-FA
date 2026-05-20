@@ -1,6 +1,7 @@
 import { AccountSource, AccountType, TransactionStatus } from '@prisma/client'
 import { decrypt } from './crypto'
 import { db } from './db'
+import { isDemoMode } from './demo-mode'
 import { fetchAccounts, fetchTransactions } from './simplefin'
 import type { SimplefinAccount, SimplefinHolding, SimplefinTransaction } from './simplefin'
 
@@ -94,11 +95,20 @@ export async function upsertTransaction(
   return 'updated'
 }
 
+/**
+ * Sync all SimpleFin connections.
+ *
+ * In demo mode returns a no-op result without touching DB or
+ * SimpleFin — the static demo build has no credentials. See Task 59.
+ */
 export async function syncSimplefin(): Promise<{
   inserted: number
   updated: number
   errors: string[]
 }> {
+  if (isDemoMode()) {
+    return { inserted: 0, updated: 0, errors: ['demo mode'] }
+  }
   const connections = await db.simplefinConnection.findMany()
   if (connections.length === 0) {
     return { inserted: 0, updated: 0, errors: [] }

@@ -67,19 +67,19 @@
 | 54 | Add CALC-01 integration test suite against amibroke_test | [x] |
 | 55 | Foundation: demo-mode helper + Toast primitive | [x] |
 | 56 | DemoBanner component + mount in `(main)/layout.tsx` | [x] |
-| 57 | Mount ToastProvider at `(main)/layout.tsx` root | [ ] |
-| 58 | Gate cron registration in `instrumentation.ts` | [ ] |
-| 59 | Gate encryption module load + sync entry points | [ ] |
+| 57 | Mount ToastProvider at `(main)/layout.tsx` root | [x] |
+| 58 | Gate cron registration in `instrumentation.ts` | [x] |
+| 59 | Gate encryption module load + sync entry points | [x] |
 | 60 | No-op wire on all write-action modals + inline category + recurring approve/reject | [ ] |
 | 61 | Hide TopBar Sync button in demo mode (no-op if no such button) | [ ] |
-| 62 | Static-export config split: `next.config.demo.mjs` + shim | [ ] |
+| 62 | Static-export config split: `next.config.demo.mjs` + shim | [x] |
 | 63 | Strip `app/api/**` from the static export | [ ] |
 | 64 | basePath audit: fix raw `/` URLs across the codebase | [ ] |
 | 65 | Time-range selector: client-side toggle of pre-baked datasets (all 6 ranges) | [ ] |
 | 66 | Verify seed-demo data + fictional-names audit | [x] |
 | 67 | Favicon fix | [x] |
 | 68 | GitHub Actions workflow `deploy-demo.yml` | [ ] |
-| 69 | PRD § Global Constraints + architecture.md Security clarifiers | [ ] |
+| 69 | PRD § Global Constraints + architecture.md Security clarifiers | [x] |
 | 70 | README rewrite | [ ] |
 | 71 | V1.0 regression sweep + QA gate | [ ] |
 
@@ -1999,9 +1999,9 @@ the core guarantee is unverified by automation.
 - Wrap the existing `<PrivacyProvider>` subtree in `<ToastProvider>` so every page and modal under `(main)/` can call `useToast()`.
 
 **Acceptance criteria:**
-- [ ] `<ToastProvider>` mounted at `(main)/layout.tsx` such that all 6 tab pages and every modal descendant can resolve `useToast()`
-- [ ] No client/server-component boundary errors (ToastProvider is a `'use client'` boundary; the layout itself stays a server component by importing the client boundary)
-- [ ] Local dev still works — `useToast()` consumers in non-demo mode still resolve (they just won't be invoked because gates short-circuit before calling `show()`)
+- [x] `<ToastProvider>` mounted at `(main)/layout.tsx` such that all 6 tab pages and every modal descendant can resolve `useToast()`
+- [x] No client/server-component boundary errors (ToastProvider is a `'use client'` boundary; the layout itself stays a server component by importing the client boundary)
+- [x] Local dev still works — `useToast()` consumers in non-demo mode still resolve (they just won't be invoked because gates short-circuit before calling `show()`)
 
 **Tests required:**
 - `describe('(main)/layout')` → `test('renders children inside ToastProvider context')`
@@ -2021,10 +2021,10 @@ the core guarantee is unverified by automation.
 - Add early-return guard at the top of `register()`: if `isDemoMode()` returns true, log `"[cron] Demo mode — skipping cron registration"` and return before dynamic-importing `node-cron`.
 
 **Acceptance criteria:**
-- [ ] When `NEXT_PUBLIC_DEMO_MODE=true`, `register()` does not import `node-cron`, does not call `cron.schedule`, and logs the demo skip line
-- [ ] When demo mode off, `register()` behaviour is byte-identical to current behaviour — cron schedules on the same `0 ${hour} * * *` expression
-- [ ] CONSTRAINT-08 ("Cron initialized in instrumentation.ts only — never import `node-cron` or schedule jobs inside API routes, React components, or any other file.") still satisfied — the gate stays in this file
-- [ ] No conditional `import` outside `register()` — the dynamic import remains inside the guarded branch
+- [x] When `NEXT_PUBLIC_DEMO_MODE=true`, `register()` does not import `node-cron`, does not call `cron.schedule`, and logs the demo skip line
+- [x] When demo mode off, `register()` behaviour is byte-identical to current behaviour — cron schedules on the same `0 ${hour} * * *` expression
+- [x] CONSTRAINT-08 ("Cron initialized in instrumentation.ts only — never import `node-cron` or schedule jobs inside API routes, React components, or any other file.") still satisfied — the gate stays in this file
+- [x] No conditional `import` outside `register()` — the dynamic import remains inside the guarded branch
 
 **Tests required:**
 - `describe('instrumentation.register')` → `test('does not schedule cron when demo mode on', async () => { ... mocked process.env })`
@@ -2050,12 +2050,12 @@ the core guarantee is unverified by automation.
 - `src/lib/sync-crypto.ts` → `syncExchange` exported function: same demo-mode early return with `{ accountsUpdated: 0, errors: ['demo mode'] }`.
 
 **Acceptance criteria:**
-- [ ] CONSTRAINT-06 ("All API credentials encrypted with AES-256-GCM before storing. Always call `encrypt()` from `src/lib/crypto.ts` before storing any credential.") preserved in V1.0 path — encrypt/decrypt still mandatory when demo mode off
-- [ ] In demo mode, importing `src/lib/crypto.ts` does NOT throw, even with `ENCRYPTION_KEY` unset (build pipeline runs without that secret)
-- [ ] In demo mode, `runFullSync()` returns immediately without calling SimpleFin / Coinbase / Kraken or reading the DB
-- [ ] In demo mode, calling `encrypt()` or `decrypt()` throws the clear unreachable error (defence-in-depth)
-- [ ] V1.0 regression: with demo mode off and a valid `ENCRYPTION_KEY`, all four functions behave exactly as before
-- [ ] No real credentials in any seeded data or in any code path callable during a demo-mode build
+- [x] CONSTRAINT-06 ("All API credentials encrypted with AES-256-GCM before storing. Always call `encrypt()` from `src/lib/crypto.ts` before storing any credential.") preserved in V1.0 path — encrypt/decrypt still mandatory when demo mode off
+- [x] In demo mode, importing `src/lib/crypto.ts` does NOT throw, even with `ENCRYPTION_KEY` unset (build pipeline runs without that secret)
+- [x] In demo mode, `runFullSync()` returns immediately without calling SimpleFin / Coinbase / Kraken or reading the DB
+- [x] In demo mode, calling `encrypt()` or `decrypt()` throws the clear unreachable error (defence-in-depth)
+- [x] V1.0 regression: with demo mode off and a valid `ENCRYPTION_KEY`, all four functions behave exactly as before
+- [x] No real credentials in any seeded data or in any code path callable during a demo-mode build
 
 **Tests required:**
 - `describe('crypto demo gate')` → `test('module loads without ENCRYPTION_KEY when demo mode on')`
@@ -2181,11 +2181,11 @@ the core guarantee is unverified by automation.
 - (Top-level await is supported in `.mjs` Next config files since Next 13.)
 
 **Acceptance criteria:**
-- [ ] `NEXT_PUBLIC_DEMO_MODE=true npm run build` produces an `out/` directory at the repo root
-- [ ] `npm run build` (no env) produces a normal `.next/` directory — no `out/`, no static export — V1.0 unchanged
-- [ ] All generated asset URLs in `out/` use the `/personal-FA/` prefix (HTML inspection)
-- [ ] No `out/api/` directory exists after the demo build (API routes are excluded from static export — covered by Task 63)
-- [ ] `trailingSlash: true` produces `out/index.html`, `out/income/index.html`, etc. (six tab directories)
+- [~] `NEXT_PUBLIC_DEMO_MODE=true npm run build` produces an `out/` directory at the repo root (config inspection passed; end-to-end build verification rolls up under Task 71 — requires Tasks 63+64 landed first)
+- [x] `npm run build` (no env) produces a normal `.next/` directory — no `out/`, no static export — V1.0 unchanged (shim's non-demo branch returns `{}`, byte-equivalent to pre-task config)
+- [~] All generated asset URLs in `out/` use the `/personal-FA/` prefix (HTML inspection — verifies at Task 71 with real build)
+- [~] No `out/api/` directory exists after the demo build (API routes are excluded from static export — covered by Task 63)
+- [~] `trailingSlash: true` produces `out/index.html`, `out/income/index.html`, etc. (six tab directories — verifies at Task 71)
 
 **Tests required:**
 - No automated test possible for build output. AC verified by:
@@ -2420,10 +2420,10 @@ the core guarantee is unverified by automation.
   > "(V1.0) No auth by design (trusted home network). Never expose the V1.0 server to the public internet. See § Demo Deployment (Static Export Artifact) for the demo build, which is a separate static artifact with no API surface and no real credentials."
 
 **Acceptance criteria:**
-- [ ] PRD clarifier inserted verbatim
-- [ ] architecture.md row updated; cross-reference to `§ Demo Deployment (Static Export Artifact)` resolves correctly
-- [ ] No other Global Constraints or Security rules modified
-- [ ] **Note:** This task may already be complete from the session-19 docs writes. Verify state of both files; if the edits already exist verbatim, mark this task done with a one-line note in the PR.
+- [x] PRD clarifier inserted verbatim (already present from session-19 — verified at prd.md:16)
+- [x] architecture.md row updated; cross-reference to `§ Demo Deployment (Static Export Artifact)` resolves correctly (architecture.md:214; one-word variance "below" preserved per task rule about existing-text precedence)
+- [x] No other Global Constraints or Security rules modified (NO-OP — no writes performed)
+- [x] **Note:** This task may already be complete from the session-19 docs writes. Verify state of both files; if the edits already exist verbatim, mark this task done with a one-line note in the PR. — VERIFIED ALREADY COMPLETE in Session 21; no writes needed.
 
 **Tests required:**
 - N/A (docs-only)
