@@ -37,8 +37,8 @@ describe('SpendingMetrics', () => {
         topCategoryPercent={35}
       />
     )
-    // 500000 vs 400000 = +25%
-    expect(screen.getByText('+25% vs previous period')).toBeInTheDocument()
+    // 500000 vs 400000 = +25% (Total) AND 125000 vs 100000 = +25% (Monthly Avg) — both cards render the same delta string
+    expect(screen.getAllByText('+25% vs previous period')).toHaveLength(2)
   })
 
   it('renders top category with percentage', () => {
