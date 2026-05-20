@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { createContext, Suspense, useContext, useMemo, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { VALID_RANGES, type RangeKey } from '@/lib/date-range'
 import type { RangeBundle } from '@/lib/dashboard-queries'
@@ -38,9 +38,15 @@ interface RangeDataProviderProps<T> {
  * `?range=` only re-renders the consumer subtree, not the whole tab.
  */
 export function RangeDataProvider<T>({ initial, children }: RangeDataProviderProps<T>) {
+  // <Suspense> boundary is required for static export: `useRangeData()` calls
+  // `useSearchParams()`, which Next.js refuses to pre-render without a
+  // declared bailout. Putting it here (vs. wrapping every consumer page
+  // individually) means every tab's RangeView is fixed by one change. The
+  // null fallback is intentional — during static prerender the slot is
+  // empty; on hydration the consumer renders with the active range.
   return (
     <RangeDataContext.Provider value={initial as RangeBundle<unknown>}>
-      {children}
+      <Suspense fallback={null}>{children}</Suspense>
     </RangeDataContext.Provider>
   )
 }
