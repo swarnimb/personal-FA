@@ -71,7 +71,7 @@
 | 58 | Gate cron registration in `instrumentation.ts` | [x] |
 | 59 | Gate encryption module load + sync entry points | [x] |
 | 60 | No-op wire on all write-action modals + inline category + recurring approve/reject | [x] |
-| 61 | Hide TopBar Sync button in demo mode (no-op if no such button) | [ ] |
+| 61 | Hide TopBar Sync button in demo mode (no-op if no such button) | [x] |
 | 62 | Static-export config split: `next.config.demo.mjs` + shim | [x] |
 | 63 | Strip `app/api/**` from the static export | [x] |
 | 64 | basePath audit: fix raw `/` URLs across the codebase | [x] |
@@ -2148,14 +2148,16 @@ the core guarantee is unverified by automation.
 - If it does not exist in code today (the only sync entry point found in the codebase audit is `SyncStatusPanel.handleRefresh` and the `SyncStatusPanel` button labelled "Refresh All"), then this task collapses to a docstring confirmation in the PR description: "No standalone TopBar sync button exists; the only user-facing sync trigger is `SyncStatusPanel`, gated in Task 60."
 
 **Acceptance criteria:**
-- [ ] No user-facing sync trigger is clickable in deployed demo (visual verification on Accounts tab — Refresh All button still renders but toasts; no other sync button anywhere)
-- [ ] V1.0 regression: TopBar visually identical in non-demo mode
+- [x] No user-facing sync trigger is clickable in deployed demo (verified: `src/components/layout/TopBar.tsx` renders only `<TimeRangeSelector>`, `<PendingBadge>`, `<PrivacyToggle>` — zero sync controls. Only sync trigger anywhere is `SyncStatusPanel.handleRefresh`'s "Refresh All" button, gated in Task 60. Deployed-demo visual rolls up to Task 71.)
+- [x] V1.0 regression: TopBar visually identical in non-demo mode (NO-OP — TopBar.tsx unchanged)
 
 **Tests required:**
-- `describe('TopBar demo gate')` → `test('renders without sync control in demo mode')` — skip if no such control exists; document in PR
+- ~~`describe('TopBar demo gate')` → `test('renders without sync control in demo mode')`~~ — SKIPPED per spec: no sync control exists in TopBar.tsx today. Documented in PR description.
 
 **Depends on:** Task 60
 **Specialist:** @ui-amibroke
+
+**Completed:** 2026-05-19 (Session 22 — Wave 4). NO-OP per spec collapse-rule: codebase audit confirmed `src/components/layout/TopBar.tsx` has no sync button (renders only TimeRangeSelector + PendingBadge + PrivacyToggle). Grep across `src/components/layout/` for `sync|Sync|SYNC` matched only `poll` in `PendingBadge.tsx:24` (unrelated — pending-transactions polling). No code change required. PR description to include: "Task 61: No standalone TopBar sync button exists; the only user-facing sync trigger is `SyncStatusPanel`, gated in Task 60."
 
 ---
 
