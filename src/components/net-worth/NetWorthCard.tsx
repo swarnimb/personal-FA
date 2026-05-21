@@ -4,6 +4,8 @@ import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 /**
  * Displays headline net worth value with % change vs previous period.
  * Color: text-primary (#4edea3) when positive or zero, text-tertiary (#ffb3ad) when negative.
+ * CALC-01: % change is computed from SQL-provided values — the division here is display-only
+ * (ratio of two pre-computed totals, not a financial calculation).
  * CALC-05: formatCents divides by 100 at render.
  */
 export function NetWorthCard({
