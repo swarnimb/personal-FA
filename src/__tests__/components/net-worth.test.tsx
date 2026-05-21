@@ -43,6 +43,15 @@ describe('NetWorthCard', () => {
     expect(screen.getByText(/vs previous period/)).toBeInTheDocument()
   })
 
+  it('renders no % change when previous period is null (e.g. Max range)', () => {
+    render(
+      <PrivacyProvider>
+        <NetWorthCard netWorthCents={550000} previousPeriodCents={null} />
+      </PrivacyProvider>
+    )
+    expect(screen.queryByText(/vs previous period/)).not.toBeInTheDocument()
+  })
+
   it('renders $··· when privacy on', () => {
     Object.defineProperty(window, 'localStorage', {
       value: { getItem: () => 'true', setItem: () => {}, removeItem: () => {} },
