@@ -19,7 +19,8 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "AmIBroke",
   description: "Personal finance dashboard",
-  icons: { icon: "/favicon.ico" },
+  // Favicon resolved via Next 15 app convention: `src/app/favicon.ico`.
+  // Auto-applies `basePath` in static-export demo builds (qa-report Finding 4 fix).
 };
 
 export default function RootLayout({

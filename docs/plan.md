@@ -1,7 +1,7 @@
 # Plan: AmIBroke Finance Tracker
 
-> Produced by `@plan`. Approved 2026-04-06. Tasks 24–25 added by `@create-plan` 2026-04-13. Tasks 26–38 added by `@create-plan` 2026-04-13 (V1.1 Stitch Design Alignment). Tasks 46–50 added 2026-04-29 (Calculation Audit fixes).
-> 50 tasks. Single file.
+> Produced by `@plan`. Approved 2026-04-06. Tasks 24–25 added by `@create-plan` 2026-04-13. Tasks 26–38 added by `@create-plan` 2026-04-13 (V1.1 Stitch Design Alignment). Tasks 46–50 added 2026-04-29 (Calculation Audit fixes). Task 76 added 2026-05-20 (`@launch-prep` pre-launch cleanup).
+> 76 tasks. Single file.
 > Mark tasks `[x]` when complete. Mark superseded tasks `[~]`.
 > `@session-start` reads this to find the next `[ ]` task.
 
@@ -86,6 +86,7 @@
 | 73 | Income "View All Entries" — demo-handle the link | [x] |
 | 74 | Range-chip prefetch — no network call on switch | [~] superseded — AC amended |
 | 75 | Re-run @qa after Tasks 72–74 land | [x] |
+| 76 | `@launch-prep` cleanup — demo-index, deployment plan, favicon, Recharts, seed-demo pre-commit, Next.js CVE upgrade, formal `@security` | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -2635,4 +2636,42 @@ the core guarantee is unverified by automation.
 
 **Depends on:** Tasks 72, 73, 74
 **Specialist:** @qa
+**Completed:** 2026-05-20
+
+---
+
+## Task 76: `@launch-prep` cleanup — demo-index, deployment plan, favicon, Recharts, seed-demo pre-commit, Next.js CVE upgrade, formal `@security`
+
+**Files:**
+- `docs/demo-index.md` — create (launch-prep Item 3)
+- `docs/architecture.md` — augment Deployment section with First Launch + smoke test + recovery (launch-prep Item 7); add Repository Hygiene row to Security Architecture table for the seed-demo pre-commit hook
+- `public/favicon.ico` → `src/app/favicon.ico` — move to Next 15 app convention (qa-report Finding 4)
+- `src/app/layout.tsx` — remove manual `icons:` metadata (Next 15 auto-handles basePath via app convention)
+- `src/app/(main)/income/page.tsx` — add `min-h-[280px]` to grid container (qa-report Finding 5)
+- `.githooks/pre-commit` — create (PII guard for `prisma/seed-demo.ts` to public repo)
+- `.gitattributes` — create (force LF on `.githooks/*` and `*.sh` for Windows clones)
+- `README.md` — document `git config core.hooksPath .githooks` setup
+- `docs/security-report.md` — create via `@security` (launch-prep Item 2; gitignored, local-only)
+- `package.json`, `package-lock.json` — `npm audit fix --force` to upgrade Next.js 15.5.14 → ^15.5.18 (security-report M1)
+- `docs/plan.md` — this task row + body
+
+**Acceptance criteria:**
+- [x] `docs/demo-index.md` exists and documents the live GitHub Pages demo with audience, URL, build pipeline, scope, residuals, rebuild + retirement steps
+- [x] `docs/architecture.md` Deployment section includes a step-by-step First Launch checklist (Postgres service, `.env` keys, migrations, build, start, LAN IP discovery), a 60-second Smoke Test, and a Recovery/rollback section
+- [x] `src/app/favicon.ico` exists; `public/favicon.ico` is gone; `src/app/layout.tsx` no longer declares `icons:` metadata — Next 15 app convention auto-applies basePath in static-export demo builds
+- [x] `src/app/(main)/income/page.tsx` grid container has `min-h-[280px]` so `<ResponsiveContainer>` measures a concrete parent on first paint
+- [x] `.githooks/pre-commit` is committed with the executable bit (`100755` in index), gated by `.gitattributes` `eol=lf` for Windows safety
+- [x] Pre-commit hook tested both paths: skips silently when seed file unstaged; refuses non-interactive shells with a clean diagnostic when seed file is staged
+- [x] README documents the one-time `git config core.hooksPath .githooks` setup
+- [x] `docs/security-report.md` written by `@security` with `Status: CLEAR` (0 Critical / 0 High); M1 resolved this task; M2 + L1 tracked
+- [x] `npm audit fix --force` applied; Next.js bumped from `15.5.14` to `^15.5.18` (caret matches the rest of the deps file); all nine GHSA-* High Next.js advisories cleared in post-upgrade audit
+- [x] `@security` Issue 4 amendment satisfied: (a) successful `npm run build` verified locally post-upgrade, (b) live-page inspection satisfied via the Task 75 cache-busted Playwright walk on 2026-05-20
+
+**Tests required:**
+- [x] `npm test` — **221/221 green** post-upgrade (no regressions)
+- [x] `npm run build` — clean compile post-upgrade, all routes listed
+- [x] `npm audit --omit=dev` post-upgrade — 0 High; 2 Moderate remaining are PostCSS-inside-Next which would only be "fixed" by downgrading Next to v9 (a major rollback). Accepted, tracked as security-report M2.
+
+**Depends on:** Task 75 (re-QA APPROVED)
+**Specialist:** @security + @dev (cross-functional pre-launch cleanup)
 **Completed:** 2026-05-20
