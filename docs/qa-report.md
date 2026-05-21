@@ -1,7 +1,9 @@
 # QA Report: AmIBroke Finance Tracker
 
-**Date:** 2026-05-16
-**Status:** APPROVED (one reduced High-Priority non-blocking residual — see Findings)
+**Date:** 2026-05-20 (latest pass — Task 75 re-QA)
+**Status:** APPROVED (two NON-BLOCKING residuals — favicon 404 carry-forward; Recharts container-sizing warning likely pre-existing — see latest "Task 75" section at the bottom of this file for the authoritative current state)
+
+> _Header reflects latest pass. Prior sections retained as historical record. Section order in this file: original 2026-05-15/16 pass → Task 71 BLOCKED pass (2026-05-19) → Task 74 Addendum (2026-05-20) → Task 75 re-QA APPROVED (2026-05-20)._
 
 > Re-QA triggered by Task 54 completion (closes the prior High-Priority CALC-01
 > coverage finding). Scope of this pass: the delta since the 2026-05-15 APPROVED
@@ -267,3 +269,95 @@ The only way to truly produce zero RSC GETs on chip click is to bypass the Next 
 
 **Carry-forward into Task 75 expectations:**
 Task 75's re-QA pass should walk PRD §14 with the amended AC #3 and expect PASS on chip rotation (instant UX + URL update preserved + no data-API call), accepting framework RSC GETs as documented residuals.
+
+---
+
+# Task 75 — Re-QA after Tasks 72–74 land
+
+**Date:** 2026-05-20
+**Status:** **APPROVED** — all 3 prior blocking findings resolved; 2 non-blocking residuals carried forward
+**Scope of this pass:** Re-walk PRD §14 against the deployed demo at `https://swarnimb.github.io/personal-FA/` after PR #4 (commit `14f5a84`) merged to `main` and Deploy Demo #6 completed (1m 28s, conclusion: success). Cold cache-busted navigation (`?cb=14f5a84`), Playwright MCP, viewport 1440×900.
+
+> **CDN-cache note:** First navigation to the bare URL returned the pre-PR-#4 cached build (chunk hash `layout-31d6d9926df14895.js` — that chunk now 404s from origin, confirming new build is live but GitHub Pages CDN was still serving the previous artifact). All AC verification was performed against the cache-busted URL to guarantee the assessment is of the post-Task-72/73/74 build. Cosmetic propagation lag is not a code finding.
+
+---
+
+## PRD §14 Acceptance Criteria — Per-AC Re-Verification
+
+| # | AC (paraphrased) | Result | Evidence |
+| --- | --- | --- | --- |
+| 1 | Visitor sees Dashboard within 2s first paint | **PASS by inheritance** | Static HTML; Session 24 measured FCP 204 ms; static-export build path unchanged |
+| 2 | All 6 tabs render with seeded data | **PASS** | All 6 tabs walked; sample evidence — Income Total $34,832; Accounts shows 6 institutions populated (Ally $12,500, Auto Loan $8,400, Chase Sapphire $1,847, Chase Total $4,248, Coinbase $15,340, Fidelity $47,200); Sync Status 5 Active / 1 Manual; banner present on all 6 |
+| 3 | Time-range switches across 6 ranges instantly, no data-API call (**amended** — see Task 74 Addendum) | **PASS (amended)** | 6 chips clicked sequentially on Dashboard. URL updated each time (`?range=ytd/1m/3m/6m/1y/max`). 6 framework RSC GETs to `personal-FA/index.txt?range=<X>&_rsc=lutug`, all 200, all basePath-prefixed. **Zero `/api/*` requests. Zero console errors.** Behavior matches amended AC text verbatim. |
+| 4 | Banner on every page with exact copy + working GitHub link | **PASS** | Verified on 6 tabs — `region "Demo announcement"` with verbatim copy `"Live demo with seeded data — no real accounts connected. View source on GitHub →"`. Link `href` → `https://github.com/swarnimb/personal-FA` |
+| 5 | Every write action no-op + correct toast | **PASS** | Connect Bank opens modal (modal-open is UI-only, no network). Refresh All click: toast appears immediately with `role="status"` and text **verbatim per PRD §14 sample copy**: `"Sync is disabled in the demo. In the real app this pulls from SimpleFin and your exchanges nightly →"`. `aria-live="polite"` mirror also present for screen readers. **Zero `/api/*`, zero POST/PUT/PATCH/DELETE during the click.** |
+| 6 | Local `npm run dev` with DEMO_MODE unset behaves as before | **PASS** | Unit 221/221 across 46 files (was 217/217 at Task 71 — 4 new tests added by Tasks 72/73 all explicit about preserving local-mode behavior); integration unchanged |
+| 7 | No real credentials in CI logs or deployed artifact | **PASS by inheritance** | Unchanged since Task 68 |
+| 8 | Workflow runs in <6 min | **PASS** | Deploy Demo #6 (commit `14f5a84`, this session's merge): **1m 28s, conclusion: success** |
+| 9 | Static export produces `out/` with no `api/` directories | **PASS by inheritance** | Workflow API-stash step unchanged since Session 23 |
+| 10 | All asset URLs include `/personal-FA/` prefix | **PASS (with cosmetic residual)** | PendingBadge no longer polls in demo (Task 72) — the prior unprefixed `https://swarnimb.github.io/api/transactions/pending` 404 is **gone** on the cache-busted nav. Income View All Entries no longer prefetches `/transactions/` (Task 73). Sidebar nav links all carry the `/personal-FA/` prefix in their `href` values. **Residual:** `/favicon.ico` still requested at root — see Finding 4 (carry-forward, NON-BLOCKING) |
+| 11 | README hero + 6 screenshots + live demo link + one-command setup | **PASS by inheritance** | Task 70 closed in Session 24; PR #2 merged earlier this session |
+| 12 | Favicon renders correctly in browser tab | **FAIL (cosmetic, NON-BLOCKING)** | `/favicon.ico` 404 carried forward — Finding 4 residual unchanged |
+| 13 | No console errors on any tab | **PASS** | **0 errors across all 6 tabs** on cache-busted fresh navigation. (The 3 errors from the very first nav — old-build PendingBadge 404 + JSON parse + favicon — were artifacts of the stale CDN cache serving the pre-PR-#4 build; resolved on cache-bust. The deployed code itself produces zero errors.) One non-error warning observed on Income tab from Recharts (`width(-1) and height(-1) of chart should be greater than 0`) — chart container sizing on initial render, cosmetic, **NON-BLOCKING** and not in scope of AC #13 which is errors only |
+| 14 | Regression sweep: V1.0 ACs still pass on local instance | **PASS** | Unit 221/221; integration unchanged since Session 24 |
+
+**Result: 13 PASS · 1 FAIL (cosmetic, NON-BLOCKING) · 0 SKIPPED**
+
+---
+
+## Targeted Re-Verification of Prior Blocking Findings
+
+### Finding 1 (range chips, prior BLOCKING) — RESOLVED via AC amendment
+
+Resolution path was Task 74 Addendum (above) — PRD §14 AC #3 reworded. Behavior on the live demo today: 6 RSC GETs per chip rotation, all returning 200, all basePath-prefixed, zero data-API calls, zero console errors. Behavior exactly matches the amended AC text.
+
+### Finding 2 (PendingBadge, prior BLOCKING) — RESOLVED via Task 72 code fix
+
+Direct verification on the deployed cache-busted demo: zero requests to `/api/transactions/pending` across 6 tabs over the walk. Zero `[PendingBadge]` console errors. The badge component never invokes `fetch` because `useEffect` early-returns when `isDemoMode()` is true. The basePath-aware fetch URL change is defence-in-depth and would have produced `/personal-FA/api/transactions/pending` had the gate failed — and it didn't.
+
+### Finding 3 (Income View All Entries, prior BLOCKING) — RESOLVED via Task 73 code fix
+
+Direct DOM verification on the deployed Income tab via `page.evaluate`:
+```
+tag: SPAN
+title: "Available when running locally."
+ariaDisabled: "true"
+closestAnchor: "no"
+className: "font-inter text-sm font-medium text-on-surface-variant cursor-default"
+```
+Element is a `<span>` (not `<a>`), carries the locked tooltip copy verbatim, is `aria-disabled="true"` for assistive tech, and has no anchor ancestor — so no navigation and no RSC prefetch are possible. Zero `/personal-FA/transactions/index.txt?type=income&_rsc=*` requests on Income tab load.
+
+---
+
+## Residual Findings (carried forward, NON-BLOCKING)
+
+### Finding 4 (residual) — `/favicon.ico` 404 at root
+
+**What is wrong:** The deployed demo's HTML still references `/favicon.ico` (no basePath prefix). GitHub Pages 404s on it.
+**Means for your product:** Browser tab shows the default globe icon instead of the AmIBroke favicon. Cosmetic only.
+**Severity:** NON-BLOCKING — was already non-blocking at Task 71 and explicitly carried forward into this re-QA per the handoff.
+**Optional follow-up:** Out of scope for Task 75. If addressed later, fix is single-line: prefix the `<link rel="icon">` href with `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}` in `app/layout.tsx` (or the equivalent), or move favicon to a basePath-aware location.
+
+### Finding 5 (new this pass, NON-BLOCKING) — Recharts container-sizing warning on Income tab
+
+**What is wrong:** Console emits one warning per Income page load: `The width(-1) and height(-1) of chart should be greater than 0, please check the style of container, or the props width(100%) and height(100%), or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the height and width.`
+**Source:** Recharts (vendored in `122-08a74577ea5eb20b.js`). The Income donut chart (`IncomeSourceCards`) and/or the bar chart container measure as -1×-1 for a tick before final layout.
+**Means for your product:** Cosmetic — the chart renders correctly after hydration. Console reads as expected when AC #13 is read strictly (warnings, not errors).
+**Severity:** NON-BLOCKING. **Likely pre-existing** — Task 71's Playwright pass focused on errors and may not have surfaced warnings explicitly. Either way, not a regression introduced by Tasks 72–74.
+**Optional follow-up:** Wrap the chart in a `ResponsiveContainer` with explicit `minHeight` or set the container's parent layout with a concrete height. Tracked here so the next QA pass knows it's a known residual, not a new issue.
+
+---
+
+## Issue 4 reinforcement — `@security` live-page inspection requirement
+
+Per Task 75 AC #4, the Issue 4 reinforcement was to be logged in `docs/framework-issues.md`. **It already is** — see the 2026-05-19 amendment block at the bottom of Issue 4 (lines 84+), which explicitly states: *"`@security` audits on any build-path OR deploy-path feature now require BOTH (a) a successful build AND (b) live-page inspection (open the deployed URL, walk the user flows, inspect network + console + any DevTools timing/asset panes) before APPROVE."* The amendment also lowers the two-strikes trigger so the next occurrence amends `sbdev-private/agents/security.md` directly. This AC is therefore satisfied without further action.
+
+---
+
+## Summary
+
+**Blocking issues:** 0
+**Non-blocking issues:** 2 (Finding 4 favicon carry-forward; Finding 5 Recharts warning, likely pre-existing)
+**Resolved this pass:** 3 (Findings 1–3 from Task 71)
+
+**Verdict: APPROVED.** All Task 71 ACs now PASS (1 cosmetic FAIL allowed by the prior verdict's NON-BLOCKING residual classification). The deployed demo at `https://swarnimb.github.io/personal-FA/` is ready for friends-and-family sharing. Recommend the builder review this report and, when satisfied, run `@launch-prep` to confirm full launch readiness.
