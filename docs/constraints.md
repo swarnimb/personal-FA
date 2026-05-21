@@ -170,6 +170,18 @@
 
 ---
 
+### CONSTRAINT-14: prisma/seed-demo.ts modifications require pre-commit confirmation
+
+**Decision:** `prisma/seed-demo.ts` is committed to a PUBLIC repository to power the static demo build. Any commit that stages this file must pass through `.githooks/pre-commit`, which requires typing the literal confirmation phrase `yes, no PII` from an interactive terminal. Non-interactive shells (CI, automation, hooks-fired-from-hooks) are blocked outright. The hook is opt-in per clone via `git config core.hooksPath .githooks` and is bypassable only via `git commit --no-verify` — a deliberate, audit-trail-leaving action.
+
+**What it means in practice:** Every change to seed data is reviewed by a human before reaching GitHub. The hook protects against muscle-memory commits that would leak real names, account numbers, transaction descriptions, or any PII into the public repo. New clones must enable the hook once before their first commit; the README documents this. Husky and lint-staged were rejected as overkill for a single-file guard — `core.hooksPath` + a 60-line POSIX shell script does the job without a dev dependency.
+
+**Who decided and when:** Builder-ratified 2026-05-20 during Task 76 (`@launch-prep` cleanup); deferred from Session 23 (memory `pre-commit-hook-seed-audit.md`, since retired).
+
+**What this closes off:** Pushing seed-demo.ts changes from CI or any non-interactive context is now an opt-in deliberate action, not an accidental one. Future automation that wants to touch this file must explicitly use `--no-verify` and document why. The confirmation phrase ("yes, no PII") is intentionally a sentence, not a single character, to defeat muscle-memory `y` responses.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -187,3 +199,4 @@
 | 11 | CreditCard/Loan balances stored positive | Negate in all net worth queries | Bug fix / builder | 2026-04-14 |
 | 12 | Cash Flow uses liquid cash = Checking+Savings only | Never fold liability balances into cash-flow figures | Task 51 / FB-13 / builder | 2026-05-15 |
 | 13 | Financial query fns in shared `src/lib/` module | Never page-private; must be integration-testable | QA finding / builder | 2026-05-15 |
+| 14 | seed-demo.ts requires pre-commit confirmation | `.githooks/pre-commit` prompts on every staged change; non-interactive blocked | Task 76 / @security / builder | 2026-05-20 |
