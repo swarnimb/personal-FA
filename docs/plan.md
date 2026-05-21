@@ -2753,7 +2753,7 @@ the core guarantee is unverified by automation.
 - [x] AC7 — Income view: breakdown across Paycheck/Salary, Bonus, Tax Refund, Freelance, Interest & Dividends, Reimbursement, Transfer In, Other Income (employer 401k match)
 - [x] AC8 — Spending view: Transfer Out excluded from spending categories (the `SPENDING_EXCLUDED_CATEGORIES` filter); breakdown shows only true expenses
 - [x] AC9 — Unit tests **221/221 green**; integration tests **8/8 green** (with updated anchors); TypeScript build clean
-- [ ] AC10 — Demo redeploys successfully via `deploy-demo.yml` and live URL reflects new data (verified post-merge)
+- [x] AC10 — Demo redeploys successfully via `deploy-demo.yml` and live URL reflects new data (verified post-merge via Playwright MCP — Session 28 handoff)
 
 **Tests required:**
 - [x] `npm test` — **221/221 green** (no regressions; spending-queries changes covered by component tests that render the Spending view)
