@@ -80,8 +80,12 @@
 | 67 | Favicon fix | [x] |
 | 68 | GitHub Actions workflow `deploy-demo.yml` | [x] |
 | 69 | PRD § Global Constraints + architecture.md Security clarifiers | [x] |
-| 70 | README rewrite | [ ] |
+| 70 | README rewrite | [x] |
 | 71 | V1.0 regression sweep + QA gate | [ ] |
+| 72 | PendingBadge — demo gate + basePath fix | [x] |
+| 73 | Income "View All Entries" — demo-handle the link | [ ] |
+| 74 | Range-chip prefetch — no network call on switch | [ ] |
+| 75 | Re-run @qa after Tasks 72–74 land | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -2535,18 +2539,20 @@ the core guarantee is unverified by automation.
 - Wrap the response handling so a non-JSON body fails loud once but does not retry-spam the console (rate-limit or back off on parse error — EH-02 style).
 
 **Acceptance criteria:**
-- [ ] On the deployed demo, DevTools network tab shows ZERO requests to `/api/transactions/pending` over 30 seconds of any tab
-- [ ] On the deployed demo, DevTools console shows ZERO `[PendingBadge]` errors and ZERO JSON parse errors
-- [ ] In local dev (`NEXT_PUBLIC_DEMO_MODE` unset), the badge polls and updates as before — no regression
-- [ ] If somehow the endpoint returns non-JSON in production (graceful degradation), the badge handles it without spamming the console
+- [x] On the deployed demo, DevTools network tab shows ZERO requests to `/api/transactions/pending` over 30 seconds of any tab _(code-verified: `useEffect` early-returns when `isDemoMode()` — no `poll()` call, no `setInterval`. Final manual verification at Task 75 against the redeployed demo.)_
+- [x] On the deployed demo, DevTools console shows ZERO `[PendingBadge]` errors and ZERO JSON parse errors _(no fetch ⇒ no parse path ⇒ no log. Final verification at Task 75.)_
+- [x] In local dev (`NEXT_PUBLIC_DEMO_MODE` unset), the badge polls and updates as before — no regression _(full suite 220/220 passing; `npm test` clean)_
+- [x] If somehow the endpoint returns non-JSON in production (graceful degradation), the badge handles it without spamming the console _(`errorLoggedRef` rate-limits — covered by unit test "logs error only once across repeated failed polls")_
 
 **Tests required:**
-- Unit: `describe('PendingBadge')` → `test('does not poll when isDemoMode() returns true')` — mock `isDemoMode`, assert `fetch` not invoked within poll interval
-- Unit: `test('uses basePath-aware fetch URL')` — mock `process.env.NEXT_PUBLIC_BASE_PATH` and assert the right URL
-- Manual: open deployed demo, watch network for 30s, confirm zero `/api/transactions/pending` requests
+- [x] Unit: `does not fetch when isDemoMode() returns true` — fake timers, advances past 2× `POLL_MS`, asserts `fetch` never called
+- [x] Unit: `uses NEXT_PUBLIC_BASE_PATH-prefixed fetch URL when set` — stubs `/personal-FA` base path, asserts `fetch` called with `/personal-FA/api/transactions/pending`
+- [x] Unit: `logs error only once across repeated failed polls (no console spam)` — confirms `console.error` is called exactly 1× across 3+ poll cycles
+- [ ] Manual: open deployed demo, watch network for 30s, confirm zero `/api/transactions/pending` requests _(deferred to Task 75 — runs against the redeployed demo after Tasks 72–74 merge)_
 
 **Depends on:** Task 71 (QA findings)
 **Specialist:** @dev
+**Completed:** 2026-05-20
 
 ---
 
