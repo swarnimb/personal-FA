@@ -64,7 +64,10 @@ export default async function IncomePage({
         <IncomeDonut sources={slice.bySource} />
       </div>
       <IncomeSourceCards sources={slice.bySource} />
-      <div className="grid grid-cols-[3fr_2fr] gap-4">
+      {/* min-h prevents Recharts width(-1)/height(-1) warning on first paint —
+          ResponsiveContainer needs a concrete parent height before measurement
+          (qa-report Finding 5 fix). 280px ≈ IncomeBarChart's 220px height + padding. */}
+      <div className="grid grid-cols-[3fr_2fr] gap-4 min-h-[280px]">
         <IncomeBarChart monthlyData={slice.monthlyData} />
         <IncomeTransactionList transactions={slice.transactions} />
       </div>

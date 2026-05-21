@@ -1,0 +1,66 @@
+#!/bin/sh
+# Pre-commit guard: prisma/seed-demo.ts is shipped to a PUBLIC repository
+# as the data source for the static demo. Any real PII committed here is
+# public the moment it is pushed.
+#
+# This hook fires whenever the seed file is staged. It refuses to commit
+# without an explicit human confirmation phrase, and refuses entirely if
+# the shell isn't interactive (CI, automation).
+#
+# Enable per clone with: git config core.hooksPath .githooks
+# Memory: pre-commit-hook-seed-audit.md
+# Source: launch-prep Task 76, qa-report 2026-05-20
+
+SEED_FILE="prisma/seed-demo.ts"
+
+# Quick exit when the seed file isn't part of this commit
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -qx "$SEED_FILE"; then
+  exit 0
+fi
+
+cat <<EOF
+
+============================================================
+  PRE-COMMIT GUARD: $SEED_FILE is staged
+============================================================
+
+This file ships to a PUBLIC repository as part of the demo.
+Anyone with the URL can read every value committed here.
+
+Before continuing, confirm the staged changes contain NONE of:
+  [ ] Real names (yourself, family, friends, employer)
+  [ ] Real bank account numbers, balances, or routing details
+  [ ] Real transaction descriptions tied to your life
+  [ ] Real addresses, phone numbers, or emails
+  [ ] Real holdings, ticker counts, or portfolio values
+
+Review the staged hunks first:
+  git diff --cached -- $SEED_FILE
+
+EOF
+
+# Require an interactive TTY for confirmation. Git invokes hooks with stdin
+# closed/piped, so the standard pattern is to read from /dev/tty directly.
+# Probe it in a subshell first so the failure (when there's no controlling
+# terminal — CI, automation, harnesses) doesn't leak a raw shell error.
+if ! ( : < /dev/tty ) 2>/dev/null; then
+  cat <<'EOF'
+Non-interactive shell detected (no controlling terminal).
+This hook requires explicit human confirmation when prisma/seed-demo.ts changes.
+
+If you really mean to commit, run from an interactive terminal,
+or bypass deliberately with:  git commit --no-verify
+EOF
+  exit 1
+fi
+
+printf 'Type "yes, no PII" to confirm and proceed: '
+read -r answer < /dev/tty
+
+if [ "$answer" = "yes, no PII" ]; then
+  echo "Confirmed. Proceeding with commit."
+  exit 0
+fi
+
+echo "Aborted: confirmation phrase not entered exactly."
+exit 1

@@ -213,6 +213,7 @@ src/
 | User input validation | Zod schemas on all API route inputs before any DB operation. |
 | LAN exposure | (V1.0) No auth by design (trusted home network). Never expose the V1.0 server to the public internet. See § Demo Deployment (Static Export Artifact) below for the demo build, which is a separate static artifact with no API surface and no real credentials. |
 | Secrets in code | None. All configuration via env vars (SEC-01). |
+| Seed-demo PII | `prisma/seed-demo.ts` is committed to a PUBLIC repo to power the demo build. `.githooks/pre-commit` refuses commits touching this file without an explicit confirmation phrase, and blocks non-interactive shells outright. Enabled per clone via `git config core.hooksPath .githooks`. |
 
 See `docs/founder-brief.md` § FB-03 for the encryption decision record.
 
@@ -220,12 +221,62 @@ See `docs/founder-brief.md` § FB-03 for the encryption decision record.
 
 ## Deployment
 
+### Summary
+
 - Run: `npm run dev` (development) or `npm run start` (production build)
 - Host binding: `0.0.0.0:3000` — configured in `package.json` scripts
 - Other LAN devices: `http://<host-machine-ip>:3000`
 - Database: PostgreSQL running as Windows service on the same machine
 - No Docker, no cloud services, no reverse proxy required
 - Cron runs inside the Next.js process — syncs only when the app is running
+
+### First Launch (V1.0 local) — step-by-step
+
+> Run this checklist exactly once on the host machine. Subsequent launches need only steps 5–6.
+
+1. **Start PostgreSQL service.**
+   - PowerShell (Admin): `Start-Service postgresql-x64-18` (service name may differ — `Get-Service postgresql-*` lists installed versions).
+   - Verify: `pg_isready -h localhost -p 5432` returns `accepting connections`.
+   - Set service to auto-start so it survives reboots: `Set-Service postgresql-x64-18 -StartupType Automatic`.
+
+2. **Populate `.env`.** Required keys (none are optional):
+   - `DATABASE_URL=postgresql://<user>:<password>@localhost:5432/amibroke`
+   - `ENCRYPTION_KEY=<32-byte hex string>` — generate once: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. **Loss of this key requires re-entering every credential.** Back it up to a password manager.
+   - `SIMPLEFIN_SETUP_TOKEN=<your token>` — obtained from https://beta-bridge.simplefin.org/
+   - `NEXT_PUBLIC_BASE_PATH=` — leave empty for V1.0 local (only the demo build sets this).
+   - **Do not** set `NEXT_PUBLIC_DEMO_MODE` for V1.0 — leave it unset. The demo gate uses strict `=== 'true'`.
+   - `.env` is gitignored. Never commit. SEC-01.
+
+3. **Apply migrations + create financial views.**
+   - `npx prisma migrate deploy` — applies all migrations including the views (`v_liquid_cash`, `v_net_worth`, `v_investments_value`).
+   - Verify: `psql -d amibroke -c "\dv"` shows the three views.
+
+4. **Connect institutions (one-time).** Boot the app once in dev mode (`npm run dev`) and use the in-app Accounts → Connect Bank flow to enter the SimpleFin setup token + crypto exchange API keys. Credentials encrypt to AES-256-GCM (SEC-06) and persist. Shut down after.
+
+5. **Build for production.**
+   - `npm ci` (clean install on first launch; later launches can use `npm install`).
+   - `npm run build` — Next 15 standalone build; takes ~30–60s on a modern machine.
+
+6. **Start the server.**
+   - `npm run start` — binds `0.0.0.0:3000`. Console should log `Ready on http://0.0.0.0:3000`.
+   - Find the LAN IP: PowerShell `(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' }).IPAddress` (pick the one matching your home subnet, typically `192.168.x.x`).
+   - Other devices: open `http://<lan-ip>:3000`.
+
+### Smoke test (every launch — 60 seconds)
+
+After the server starts, walk this short list before trusting the build:
+
+1. Open `http://localhost:3000` — Dashboard renders within 2s. Net Worth and Liquid Cash show non-zero values.
+2. Click each of the 6 tabs (Dashboard, Net Worth, Income, Spending, Investments, Accounts). Every tab renders without throwing.
+3. Top bar → Refresh All (or wait for cron at the next scheduled time). Watch console + `SyncLog` row: one entry per sync, no LOUD errors per EH-02. If a sync fails, the error context (`what`, `where`, `why`) appears in the server log per EH-01.
+4. Add a manual transaction via the in-app modal. Verify it appears in the transaction list and the Liquid Cash figure updates after `router.refresh()`.
+5. Stop the server with `Ctrl+C`. Cron stops with it (by design — see CONSTRAINT-08).
+
+### Recovery / rollback
+
+- **Bad migration:** the project pins Prisma 5.22.0 (see FB-06). Roll back with `npx prisma migrate resolve --rolled-back <migration-name>` then redeploy a fixed migration. Never edit a deployed migration in place.
+- **Lost `ENCRYPTION_KEY`:** all stored credentials become unrecoverable. Re-enter them via the Accounts flow. Historical transaction/snapshot data is unaffected (only credentials are encrypted).
+- **DB corruption:** `pg_dump`/`pg_restore` on a regular cadence is the user's responsibility (single-user trust model, CONSTRAINT-03). No automated backup ships with V1.0.
 
 ---
 

@@ -89,6 +89,16 @@ Open `http://localhost:3000`. The dev server binds to `0.0.0.0` — other device
 
 The app boots empty without any sync providers configured; bank and crypto integrations are additive.
 
+### Enable the seed-demo PII guard (one-time)
+
+`prisma/seed-demo.ts` powers the public demo, which means it ships to this **public** repository. The repo includes a pre-commit hook that refuses commits touching the seed file unless you type a confirmation phrase. Enable it once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook is at `.githooks/pre-commit`. It blocks non-interactive shells outright. You can always bypass deliberately with `git commit --no-verify`.
+
 ---
 
 ## Run the demo locally

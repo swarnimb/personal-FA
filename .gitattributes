@@ -1,0 +1,4 @@
+# Force LF line endings on shell scripts so Git Bash on Windows can execute them.
+# Without this, autocrlf=true on Windows clones flips them to CRLF and the shebang breaks.
+.githooks/*  text eol=lf
+*.sh         text eol=lf
