@@ -43,11 +43,15 @@ describe('audit-seed-data script', () => {
     for (const n of report.accountNames) expect(typeof n).toBe('string')
     for (const s of report.holdingSymbols) expect(typeof s).toBe('string')
 
-    // The seed defines 6 accounts and 4 distinct holdings (VOO, NVDA, MSFT, AAPL).
+    // Task 78 rebuild: 11 accounts and 14 distinct holdings.
+    //   Accounts: Checking, HYSA, 2 CCs, Brokerage, 401(k), Roth IRA, HSA,
+    //   Coinbase, Auto Loan, Student Loan.
+    //   Holdings: VOO/QQQ/NVDA/MSFT/AAPL (brokerage), FXAIX/FSPSX/FXNAX (401k),
+    //   VTI/VXUS (Roth), FZROX (HSA), BTC/ETH/SOL (Coinbase).
     // The merchant list varies probabilistically — assert non-empty rather than exact size.
     expect(report.merchants.length).toBeGreaterThan(0)
-    expect(report.accountNames.length).toBe(6)
-    expect(report.holdingSymbols.length).toBe(4)
+    expect(report.accountNames.length).toBe(11)
+    expect(report.holdingSymbols.length).toBe(14)
     expect(report.holdingSymbols).toEqual(expect.arrayContaining(['AAPL', 'MSFT', 'NVDA', 'VOO']))
   })
 

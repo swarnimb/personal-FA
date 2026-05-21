@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getDateRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
-import { INCOME_CATEGORIES } from '@/lib/categories'
+import { SPENDING_EXCLUDED_CATEGORIES } from '@/lib/categories'
 
 /**
  * Bundle of one dataset per RangeKey. Used by demo-mode pages that bake every
@@ -46,14 +46,14 @@ export async function getSpendingByCategory(
   from: Date,
   to: Date,
 ): Promise<{ categories: { category: string; totalCents: number }[]; totalOutflowCents: number }> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
+  const exclList = Prisma.join(SPENDING_EXCLUDED_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<{ category: string; totalCents: bigint; totalOutflowCents: bigint }[]>(Prisma.sql`
     WITH ranked AS (
       SELECT category, SUM(ABS("amountCents"))::int AS "totalCents",
              ROW_NUMBER() OVER (ORDER BY SUM(ABS("amountCents")) DESC) AS rn
       FROM "Transaction"
       WHERE "amountCents" < 0 AND status = 'confirmed'
-        AND category NOT IN (${incomeList}) AND date >= ${from} AND date <= ${to}
+        AND category NOT IN (${exclList}) AND date >= ${from} AND date <= ${to}
       GROUP BY category
     )
     SELECT CASE WHEN rn <= 5 THEN category ELSE 'Other' END AS category,
