@@ -83,7 +83,7 @@
 | 70 | README rewrite | [x] |
 | 71 | V1.0 regression sweep + QA gate | [ ] |
 | 72 | PendingBadge — demo gate + basePath fix | [x] |
-| 73 | Income "View All Entries" — demo-handle the link | [ ] |
+| 73 | Income "View All Entries" — demo-handle the link | [x] |
 | 74 | Range-chip prefetch — no network call on switch | [ ] |
 | 75 | Re-run @qa after Tasks 72–74 land | [ ] |
 
@@ -2567,17 +2567,19 @@ the core guarantee is unverified by automation.
 - Preserve local-mode behavior — when DEMO_MODE is unset, the link still navigates to `/transactions/?type=income`.
 
 **Acceptance criteria:**
-- [ ] On the deployed demo Income tab, DevTools network tab shows ZERO 404s for `/transactions/index.txt?type=income&_rsc=*`
-- [ ] On the deployed demo, "View All Entries" is visibly present (do not hide it) but does not trigger prefetch or navigation
-- [ ] In local dev (DEMO_MODE unset), "View All Entries" link works as before — clicking it navigates to the transactions detail
-- [ ] No other "View All" / pagination links across the app still point to non-exported routes in demo mode (sweep + fix any others found)
+- [x] On the deployed demo Income tab, DevTools network tab shows ZERO 404s for `/transactions/index.txt?type=income&_rsc=*` _(code-verified: in demo mode the element is a `<span>`, never an `<a>` → no RSC prefetch is even possible. Final manual verification at Task 75.)_
+- [x] On the deployed demo, "View All Entries" is visibly present (do not hide it) but does not trigger prefetch or navigation _(span rendered with text "View All Entries"; aria-disabled="true"; native title tooltip "Available when running locally.")_
+- [x] In local dev (DEMO_MODE unset), "View All Entries" link works as before — clicking it navigates to the transactions detail _(non-demo branch preserves the original Link to `/transactions?type=income`; existing test now explicit about non-demo and still passing)_
+- [x] No other "View All" / pagination links across the app still point to non-exported routes in demo mode _(sweep complete: SpendingTransactionList.tsx and SpendingConcentration.tsx both link to `/spending` which IS in the static export — no action needed; only Income's `/transactions` was broken)_
 
 **Tests required:**
-- Unit: render the income component with `isDemoMode` mocked true vs false; assert link element type differs (Link in local, span in demo)
-- Manual: deployed demo Income tab, hover/click "View All Entries", confirm no nav + no console error
+- [x] Unit: `renders Next Link to /transactions?type=income in local mode` — explicit non-demo env stub, asserts anchor href
+- [x] Unit: `renders inert <span> with disabled-link tooltip in demo mode` — asserts no anchor, tag === SPAN, title and aria-disabled attributes set
+- [ ] Manual: deployed demo Income tab, hover/click "View All Entries", confirm no nav + no console error _(deferred to Task 75 — Playwright re-QA against the redeployed demo)_
 
 **Depends on:** Task 71 (QA findings)
 **Specialist:** @dev
+**Completed:** 2026-05-20
 
 ---
 
