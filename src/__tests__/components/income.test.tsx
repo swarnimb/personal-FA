@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrivacyProvider } from '../../context/PrivacyContext'
@@ -7,6 +7,10 @@ import { IncomeTransactionList } from '../../components/income/IncomeTransaction
 import { IncomeBarChart } from '../../components/income/IncomeBarChart'
 import { TotalIncomeCard } from '../../components/income/TotalIncomeCard'
 import { IncomeSourceCards } from '../../components/income/IncomeSourceCards'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 const makeTx = (overrides = {}) => ({
   id: 'tx-1',
@@ -90,7 +94,13 @@ describe('IncomeTransactionList link', () => {
   // Task 64 — Next.js <Link> is required so basePath is auto-prepended in the
   // GitHub Pages demo build. A raw <a href="/..."> would 404 under
   // /personal-FA/. We assert the rendered anchor href to confirm migration.
-  it('renders Next Link to /transactions?type=income', () => {
+  //
+  // Task 73 — In demo mode the link is replaced with an inert <span>
+  // because the static export has no `/transactions/` route. Two tests
+  // below assert: (a) local mode still renders the navigating Link;
+  // (b) demo mode renders the disabled span with the locked tooltip copy.
+  it('renders Next Link to /transactions?type=income in local mode', () => {
+    vi.stubEnv('NEXT_PUBLIC_DEMO_MODE', undefined as unknown as string)
     render(
       <PrivacyProvider>
         <IncomeTransactionList transactions={[makeTx()]} />
@@ -99,6 +109,24 @@ describe('IncomeTransactionList link', () => {
     const link = screen.getByText('View All Entries').closest('a')
     expect(link).not.toBeNull()
     expect(link?.getAttribute('href')).toBe('/transactions?type=income')
+  })
+
+  it('renders inert <span> with disabled-link tooltip in demo mode', () => {
+    vi.stubEnv('NEXT_PUBLIC_DEMO_MODE', 'true')
+    render(
+      <PrivacyProvider>
+        <IncomeTransactionList transactions={[makeTx()]} />
+      </PrivacyProvider>
+    )
+    const element = screen.getByText('View All Entries')
+    // The element is still present in the DOM (AC: do not hide it)…
+    expect(element).toBeInTheDocument()
+    // …but it is NOT an anchor — no navigation, no prefetch.
+    expect(element.closest('a')).toBeNull()
+    expect(element.tagName).toBe('SPAN')
+    // Tooltip copy is locked — matches the constant in IncomeTransactionList.
+    expect(element.getAttribute('title')).toBe('Available when running locally.')
+    expect(element.getAttribute('aria-disabled')).toBe('true')
   })
 })
 

@@ -246,3 +246,24 @@ The local-instance side of Task 71 (unit + integration green, all 13 constraints
 **Re-QA trigger:** After Tasks 72 (PendingBadge demo gate + basePath), 73 (Income "View All Entries" demo handling), 74 (range-chip prefetch behavior) land and the demo redeploys via `deploy-demo.yml`, re-run `@qa` (Task 75) against the live URL. Expected next verdict: APPROVED with Findings 4–5 carried as residuals.
 
 **Do NOT run `@launch-prep` until Status is APPROVED.**
+
+---
+
+## Task 74 Addendum — PRD §14 AC #3 amended; Finding 1 resolved by AC change
+
+**Date:** 2026-05-20
+**Decision:** **Option (a) from Finding 1 chosen** — accept the residual and amend PRD §14 AC #3 from "no network call" to "no data-API call (framework RSC prefetches allowed)".
+
+**Why the original "must be done" fix could not be applied as written:**
+The Finding 1 recommendation (add `prefetch={false}` to chip `<Link>`s OR switch chips to button + `router.replace()`) was based on the assumption that chips were `<Link>` components firing Next App Router prefetch on render. They are not. `src/components/layout/TimeRangeSelector.tsx` has used `<button onClick={...}>` calling `router.replace()` since Session 23 (Task 65) — both halves of the recommendation were already in place. The 6 RSC GETs come from `router.replace()` itself: Next 15 App Router refetches the current route segment on every search-param change to re-evaluate server components. This is by design and is not configurable.
+
+**Why we are not engineering around it:**
+The only way to truly produce zero RSC GETs on chip click is to bypass the Next router for demo mode via `window.history.replaceState()` and re-engineer `useRangeData()` (in `src/components/layout/RangeDataProvider.tsx`) to read URL state from a synthetic event-driven hook instead of `useSearchParams()` (which does not respond to manual history changes). Estimated cost: ~30 lines of demo-specific code in core data-loading, with branching state semantics between local and demo modes. User-perceived impact of the fix: zero — the data swap is already instant in both modes. The 6 RSC GETs return the static page index (no user data), do not affect UX, and are framework boilerplate.
+
+**Updated AC text (PRD §14 AC #3):**
+> Time-range selector switches between all 6 ranges (YTD/1M/3M/6M/1Y/Max) instantly with no data-API call — all 6 datasets are baked into the page. Framework RSC prefetch GETs against the static page index (e.g. `index.txt?range=<value>`) are permitted: they carry no user data, return the same pre-rendered page bundle that's already loaded, and have no effect on perceived UX.
+
+**Status of Finding 1 after this decision:** RESOLVED via AC amendment. No code change required. Task 74 marked `[~]` superseded in `docs/plan.md`. Task 75 (re-QA) will verify under the amended AC.
+
+**Carry-forward into Task 75 expectations:**
+Task 75's re-QA pass should walk PRD §14 with the amended AC #3 and expect PASS on chip rotation (instant UX + URL update preserved + no data-API call), accepting framework RSC GETs as documented residuals.

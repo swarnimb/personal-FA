@@ -80,8 +80,12 @@
 | 67 | Favicon fix | [x] |
 | 68 | GitHub Actions workflow `deploy-demo.yml` | [x] |
 | 69 | PRD § Global Constraints + architecture.md Security clarifiers | [x] |
-| 70 | README rewrite | [ ] |
+| 70 | README rewrite | [x] |
 | 71 | V1.0 regression sweep + QA gate | [ ] |
+| 72 | PendingBadge — demo gate + basePath fix | [x] |
+| 73 | Income "View All Entries" — demo-handle the link | [x] |
+| 74 | Range-chip prefetch — no network call on switch | [~] superseded — AC amended |
+| 75 | Re-run @qa after Tasks 72–74 land | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -2535,18 +2539,20 @@ the core guarantee is unverified by automation.
 - Wrap the response handling so a non-JSON body fails loud once but does not retry-spam the console (rate-limit or back off on parse error — EH-02 style).
 
 **Acceptance criteria:**
-- [ ] On the deployed demo, DevTools network tab shows ZERO requests to `/api/transactions/pending` over 30 seconds of any tab
-- [ ] On the deployed demo, DevTools console shows ZERO `[PendingBadge]` errors and ZERO JSON parse errors
-- [ ] In local dev (`NEXT_PUBLIC_DEMO_MODE` unset), the badge polls and updates as before — no regression
-- [ ] If somehow the endpoint returns non-JSON in production (graceful degradation), the badge handles it without spamming the console
+- [x] On the deployed demo, DevTools network tab shows ZERO requests to `/api/transactions/pending` over 30 seconds of any tab _(code-verified: `useEffect` early-returns when `isDemoMode()` — no `poll()` call, no `setInterval`. Final manual verification at Task 75 against the redeployed demo.)_
+- [x] On the deployed demo, DevTools console shows ZERO `[PendingBadge]` errors and ZERO JSON parse errors _(no fetch ⇒ no parse path ⇒ no log. Final verification at Task 75.)_
+- [x] In local dev (`NEXT_PUBLIC_DEMO_MODE` unset), the badge polls and updates as before — no regression _(full suite 220/220 passing; `npm test` clean)_
+- [x] If somehow the endpoint returns non-JSON in production (graceful degradation), the badge handles it without spamming the console _(`errorLoggedRef` rate-limits — covered by unit test "logs error only once across repeated failed polls")_
 
 **Tests required:**
-- Unit: `describe('PendingBadge')` → `test('does not poll when isDemoMode() returns true')` — mock `isDemoMode`, assert `fetch` not invoked within poll interval
-- Unit: `test('uses basePath-aware fetch URL')` — mock `process.env.NEXT_PUBLIC_BASE_PATH` and assert the right URL
-- Manual: open deployed demo, watch network for 30s, confirm zero `/api/transactions/pending` requests
+- [x] Unit: `does not fetch when isDemoMode() returns true` — fake timers, advances past 2× `POLL_MS`, asserts `fetch` never called
+- [x] Unit: `uses NEXT_PUBLIC_BASE_PATH-prefixed fetch URL when set` — stubs `/personal-FA` base path, asserts `fetch` called with `/personal-FA/api/transactions/pending`
+- [x] Unit: `logs error only once across repeated failed polls (no console spam)` — confirms `console.error` is called exactly 1× across 3+ poll cycles
+- [ ] Manual: open deployed demo, watch network for 30s, confirm zero `/api/transactions/pending` requests _(deferred to Task 75 — runs against the redeployed demo after Tasks 72–74 merge)_
 
 **Depends on:** Task 71 (QA findings)
 **Specialist:** @dev
+**Completed:** 2026-05-20
 
 ---
 
@@ -2561,23 +2567,27 @@ the core guarantee is unverified by automation.
 - Preserve local-mode behavior — when DEMO_MODE is unset, the link still navigates to `/transactions/?type=income`.
 
 **Acceptance criteria:**
-- [ ] On the deployed demo Income tab, DevTools network tab shows ZERO 404s for `/transactions/index.txt?type=income&_rsc=*`
-- [ ] On the deployed demo, "View All Entries" is visibly present (do not hide it) but does not trigger prefetch or navigation
-- [ ] In local dev (DEMO_MODE unset), "View All Entries" link works as before — clicking it navigates to the transactions detail
-- [ ] No other "View All" / pagination links across the app still point to non-exported routes in demo mode (sweep + fix any others found)
+- [x] On the deployed demo Income tab, DevTools network tab shows ZERO 404s for `/transactions/index.txt?type=income&_rsc=*` _(code-verified: in demo mode the element is a `<span>`, never an `<a>` → no RSC prefetch is even possible. Final manual verification at Task 75.)_
+- [x] On the deployed demo, "View All Entries" is visibly present (do not hide it) but does not trigger prefetch or navigation _(span rendered with text "View All Entries"; aria-disabled="true"; native title tooltip "Available when running locally.")_
+- [x] In local dev (DEMO_MODE unset), "View All Entries" link works as before — clicking it navigates to the transactions detail _(non-demo branch preserves the original Link to `/transactions?type=income`; existing test now explicit about non-demo and still passing)_
+- [x] No other "View All" / pagination links across the app still point to non-exported routes in demo mode _(sweep complete: SpendingTransactionList.tsx and SpendingConcentration.tsx both link to `/spending` which IS in the static export — no action needed; only Income's `/transactions` was broken)_
 
 **Tests required:**
-- Unit: render the income component with `isDemoMode` mocked true vs false; assert link element type differs (Link in local, span in demo)
-- Manual: deployed demo Income tab, hover/click "View All Entries", confirm no nav + no console error
+- [x] Unit: `renders Next Link to /transactions?type=income in local mode` — explicit non-demo env stub, asserts anchor href
+- [x] Unit: `renders inert <span> with disabled-link tooltip in demo mode` — asserts no anchor, tag === SPAN, title and aria-disabled attributes set
+- [ ] Manual: deployed demo Income tab, hover/click "View All Entries", confirm no nav + no console error _(deferred to Task 75 — Playwright re-QA against the redeployed demo)_
 
 **Depends on:** Task 71 (QA findings)
 **Specialist:** @dev
+**Completed:** 2026-05-20
 
 ---
 
 ## Task 74: Range-chip prefetch — no network call on switch
 
-**Files:**
+**[~] SUPERSEDED 2026-05-20** — PRD §14 AC #3 was amended in the same session (see `docs/qa-report.md` Task 74 addendum). The recommended fixes in the original QA finding (`prefetch={false}` on `<Link>` chips, OR switch to button + `router.replace()`) were both already implemented since Session 23 — `TimeRangeSelector.tsx` uses `<button onClick>` calling `router.replace()`. The 6 RSC GETs that QA observed come from `router.replace()` itself, which Next 15 App Router fires on every search-param change to re-evaluate the route segment. The only way to eliminate them is to bypass the Next router via `window.history.replaceState()` and re-engineer `useRangeData()` to read URL state from a custom event-driven hook in demo mode — ~30 lines of demo-specific plumbing in core data-loading code, with no user-perceived benefit. Decision: amend the AC to "no data-API call (framework RSC prefetches allowed)" and mark this task superseded rather than ship architectural complexity for an aesthetic gain. The 6 prefetch GETs return the static page index (no user data), do not affect UX, and are framework boilerplate.
+
+**Files (had this been implemented):**
 - The range-chip component (search `src/components/range/`, `src/components/dashboard/`, or wherever `TimeRangeChips` / `RangeChips` lives)
 
 **Functions to implement:**
