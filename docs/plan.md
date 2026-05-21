@@ -2712,3 +2712,55 @@ the core guarantee is unverified by automation.
 **Depends on:** Task 76 (security-report.md established with L1/M2 findings)
 **Specialist:** @dev
 **Completed:** 2026-05-20
+
+---
+
+## Task 78: Demo Data Overhaul — Full Mid-Career Persona (balanced books)
+
+**Why:** The prior `prisma/seed-demo.ts` had unbalanced books — transactions on liquid accounts did not reconcile to the displayed current balances. The chart query reconstructs historical state by rolling current balances backward over confirmed future transactions; with too much income and too few outflows in the seed, the reconstruction produced absurd negative values 5 years ago. The Net Worth and Cash Flow trends shown on the live demo (https://swarnimb.github.io/personal-FA/) consequently looked broken — climbing out of a deep hole rather than telling a believable growth story. This task rebuilds the seed around the principle that **every dollar movement is a posted transaction**, and adopts a richer Full Mid-Career persona for a substantively stronger feature showcase.
+
+**Files:**
+- `prisma/seed-demo.ts` — full rewrite (~700 lines)
+- `src/lib/categories.ts` — add `Bonus`, `Tax Refund` to `INCOME_CATEGORIES`; add `SPENDING_EXCLUDED_CATEGORIES` constant (income categories + `Transfer Out`) — internal transfers are not expenses in the wealth sense
+- `src/lib/spending-queries.ts` — switch 4 functions to filter on `SPENDING_EXCLUDED_CATEGORIES` instead of `INCOME_CATEGORIES`
+- `src/lib/dashboard-queries.ts` — same switch in `getSpendingByCategory`
+- `src/app/api/dashboard/route.ts` — same switch in its inline `getSpendingByCategory` copy
+- `src/app/api/spending/route.ts` — same switch in its inline `getSpendingBreakdown` copy
+- `src/__tests__/integration/dashboard-queries.integration.test.ts` — update `CHECKING_CENTS` / `SAVINGS_CENTS` anchors; rewrite `getNetWorthHistory` test to sum over multiple Investment + Crypto accounts (`findFirstOrThrow` no longer valid with 4 Investment + 1 Crypto)
+- `src/__tests__/integration/audit-seed-data.integration.test.ts` — update counts (11 accounts, 14 holdings); keep `Acme Corp — Direct Deposit` merchant assertion working by preserving that exact merchant name in the seed
+
+**Persona (implicit — no name in DB):** ~33-year-old senior software engineer in a HCOL city. Net pay grows $98k → $148k (2021 → 2025). Rents; bought a used Toyota Aug 2023 (auto loan); nearly done with undergrad student loan. Crypto-curious — entered Nov 2021 peak. Aggressively contributing to 401(k) ($23k/yr by 2024), Roth IRA (maxed since 2022), HSA (since 2024).
+
+**Accounts (11):** Chase Checking, Ally HYSA, Chase Sapphire Reserve, Amex Gold, Fidelity Brokerage, Fidelity 401(k), Fidelity Roth IRA, HealthEquity HSA, Coinbase, Auto Loan, Student Loan.
+
+**Holdings (14):** VOO/QQQ/NVDA/MSFT/AAPL (Brokerage); FXAIX/FSPSX/FXNAX (401k); VTI/VXUS (Roth); FZROX (HSA); BTC/ETH/SOL (Coinbase).
+
+**Recurring series (6):** Netflix, Spotify, Apple iCloud+, LA Fitness, Notion (monthly), Amazon Prime (yearly). Posted on Checking (see CC note below).
+
+**Architectural decisions baked into the seed:**
+- **Credit cards modelled as passthrough.** Both CCs have `currentBalanceCents = 0` and no transactions. All would-be CC charges are posted directly on Checking. Rationale: the chart query for liabilities (`-(currentBalance - SUM(future))`) with charges conventionally stored as negative produces phantom historical CC debt that no transaction pairing fully removes (mid-cycle reconstruction always wobbles). Fixing the query is out-of-scope for a demo-data task; modelling CCs as passthrough sidesteps the bug. The Accounts page still lists both CCs (with $0 balance — "you're current"). Spending categorisation is unaffected (filters on category, not account).
+- **Loans use paired transactions** with the sign convention the chart query expects: borrow = POSITIVE on loan account; principal credit = NEGATIVE on loan account. This makes the auto-loan chart reconstruct correctly (no debt before Aug 2023; $25k jump at purchase; amortising to ~$7.2k today) and the student-loan chart (steady amortisation from $18k opening to ~$5k today).
+- **Investment accounts** (Brokerage, 401k, Roth, HSA, Coinbase) get `BalanceSnapshot` rows every 3 days from their opening date through SEED_AS_OF. The chart query ignores transactions on these accounts (uses snapshots only); the contribution / dividend transactions exist solely to populate the Income view.
+- **Current balances are computed** from `opening + SUM(confirmed transactions through SEED_AS_OF)` at the end of the seed and written back via `prisma.account.update`. No hand-tuned constants — the seed is self-consistent by construction. PRNG seeded deterministically so output is reproducible across reseeds.
+
+**Acceptance criteria:**
+- [x] AC1 — `prisma/seed-demo.ts` rewritten; transactions reconcile to `currentBalanceCents` by construction
+- [x] AC2 — Net Worth historical trajectory: ~$17k (Apr 2021) → $432,961 (Apr 2026) — clean upward curve with visible 2022 dip (market + crypto winter)
+- [x] AC3 — Cash Flow trajectory: ~$7k → $97,305 liquid — smooth upward, no negative-ditch region
+- [x] AC4 — Accounts page: 11 accounts, all with computed balances
+- [x] AC5 — Investments page: 14 holdings across 5 investment/crypto accounts; Coinbase split into BTC/ETH/SOL
+- [x] AC6 — Pending Review panel: 6 due items (one per recurring series, dated April 2026)
+- [x] AC7 — Income view: breakdown across Paycheck/Salary, Bonus, Tax Refund, Freelance, Interest & Dividends, Reimbursement, Transfer In, Other Income (employer 401k match)
+- [x] AC8 — Spending view: Transfer Out excluded from spending categories (the `SPENDING_EXCLUDED_CATEGORIES` filter); breakdown shows only true expenses
+- [x] AC9 — Unit tests **221/221 green**; integration tests **8/8 green** (with updated anchors); TypeScript build clean
+- [ ] AC10 — Demo redeploys successfully via `deploy-demo.yml` and live URL reflects new data (verified post-merge)
+
+**Tests required:**
+- [x] `npm test` — **221/221 green** (no regressions; spending-queries changes covered by component tests that render the Spending view)
+- [x] `npm run test:integration` — **8/8 green** (anchors updated; smoke-check passes; CONSTRAINT-11 net-worth math validated across multiple Investment + Crypto accounts; CONSTRAINT-12 liquid-cash filter validated)
+- [x] `npm run build` — clean
+- [x] `npm audit --omit=dev` — unchanged (still 2 Moderates, both PostCSS in next bundle, per FB-17 monitoring stance)
+
+**Depends on:** Task 77 (Post-V1.0 Cleanup section established)
+**Specialist:** @dev
+**Completed:** 2026-05-21

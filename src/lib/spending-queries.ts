@@ -1,7 +1,7 @@
 import { Prisma, TransactionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getPreviousPeriodRange, type RangeKey } from '@/lib/date-range'
-import { INCOME_CATEGORIES } from '@/lib/categories'
+import { SPENDING_EXCLUDED_CATEGORIES } from '@/lib/categories'
 
 type SpendingRow = {
   category: string
@@ -18,7 +18,7 @@ export async function getSpendingBreakdown(
   from: Date,
   to: Date,
 ): Promise<{ totalCents: number; byCategory: { category: string; totalCents: number; percentage: number }[] }> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
+  const exclList = Prisma.join(SPENDING_EXCLUDED_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<SpendingRow[]>(Prisma.sql`
     WITH spending AS (
       SELECT
@@ -27,7 +27,7 @@ export async function getSpendingBreakdown(
       FROM "Transaction"
       WHERE "amountCents" < 0
         AND status = 'confirmed'
-        AND category NOT IN (${incomeList})
+        AND category NOT IN (${exclList})
         AND date >= ${from}
         AND date <= ${to}
       GROUP BY category
@@ -61,12 +61,12 @@ export async function getSpendingBreakdown(
  */
 export async function getPreviousPeriodSpending(range: RangeKey): Promise<number> {
   const { from, to } = getPreviousPeriodRange(range)
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
+  const exclList = Prisma.join(SPENDING_EXCLUDED_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<{ total: bigint }[]>(Prisma.sql`
     SELECT COALESCE(SUM(ABS("amountCents")), 0)::int AS total
     FROM "Transaction"
     WHERE "amountCents" < 0 AND status = 'confirmed'
-      AND category NOT IN (${incomeList})
+      AND category NOT IN (${exclList})
       AND date >= ${from} AND date <= ${to}
   `)
   return Number(rows[0]?.total ?? 0)
@@ -77,7 +77,7 @@ export async function getPreviousPeriodSpending(range: RangeKey): Promise<number
  * divided by the number of distinct months covered. Math stays in SQL.
  */
 export async function getMonthlyAverageSpending(from: Date, to: Date): Promise<number> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
+  const exclList = Prisma.join(SPENDING_EXCLUDED_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<{ avg: bigint }[]>(Prisma.sql`
     SELECT COALESCE(
       SUM(ABS("amountCents")) /
@@ -91,7 +91,7 @@ export async function getMonthlyAverageSpending(from: Date, to: Date): Promise<n
     )::int AS avg
     FROM "Transaction"
     WHERE "amountCents" < 0 AND status = 'confirmed'
-      AND category NOT IN (${incomeList})
+      AND category NOT IN (${exclList})
       AND date >= ${from} AND date <= ${to}
   `)
   return Number(rows[0]?.avg ?? 0)
@@ -116,7 +116,7 @@ export async function getSpendingTransactions(
     where: {
       amountCents: { lt: 0 },
       status: TransactionStatus.confirmed,
-      category: { notIn: INCOME_CATEGORIES },
+      category: { notIn: SPENDING_EXCLUDED_CATEGORIES },
       date: { gte: from, lte: to },
     },
     orderBy: { date: 'desc' },

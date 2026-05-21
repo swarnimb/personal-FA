@@ -17,12 +17,19 @@ class IntegrationDbError extends Error {
 
 const utc = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d))
 
-// Explicit non-PRNG literals from prisma/seed-demo.ts — safe deterministic anchors.
-const CHECKING_CENTS = 424783
-const SAVINGS_CENTS = 1250000
-const LIQUID_TOTAL_CENTS = CHECKING_CENTS + SAVINGS_CENTS // 1,674,783
-const CREDIT_CARD_CENTS = 184722
-const LOAN_CENTS = 840000
+// Anchors from prisma/seed-demo.ts — deterministic PRNG seed produces these
+// exact values. The seed computes Checking/HYSA balances from the transaction
+// streams (opening + SUM(confirmed txns)), so changes to seed parameters that
+// affect those streams will require re-running the seed and updating these.
+//
+// Task 78 rebuild: 11 accounts (2 CCs, 2 loans, 5 investment/crypto). CCs are
+// passthrough — currentBalance = 0, no charges or payments posted on them.
+// Spending now happens directly on Checking. Loan balances are positive (per
+// CONSTRAINT-11) and computed from streams (auto: opening 0 + Aug 2023 borrow
+// + monthly principal credits; student: opening 18000 + monthly principal credits).
+const CHECKING_CENTS = 3332858    // computed by seed-demo.ts (Apr 13, 2026)
+const SAVINGS_CENTS = 6397657
+const LIQUID_TOTAL_CENTS = CHECKING_CENTS + SAVINGS_CENTS
 // A date past the last confirmed liquid transaction (2026-04-30 savings interest):
 const AFTER_ALL_TXNS = utc(2026, 12, 31)
 
@@ -117,22 +124,41 @@ describe('getNetWorthHistory', () => {
     const series = await getNetWorthHistory(utc(2026, 4, 1), to, '1m')
     const last = series[series.length - 1] // month-end 2026-05-31 — past all confirmed txns
 
-    const snap = async (type: 'Investment' | 'Crypto') => {
-      const acct = await db.account.findFirstOrThrow({
-        where: { type, isActive: true },
+    // Sum the latest snapshot ≤ `to` across every active Investment/Crypto
+    // account. The seed has 4 Investment accounts (Brokerage, 401k, Roth, HSA)
+    // and 1 Crypto (Coinbase) — earlier single-account assumption no longer
+    // holds.
+    async function snapTotal(types: ('Investment' | 'Crypto')[]) {
+      const accts = await db.account.findMany({
+        where: { type: { in: types }, isActive: true },
         select: { id: true },
       })
-      const s = await db.balanceSnapshot.findFirst({
-        where: { accountId: acct.id, date: { lte: to } },
-        orderBy: { date: 'desc' },
-        select: { balanceCents: true },
+      let total = 0
+      for (const a of accts) {
+        const s = await db.balanceSnapshot.findFirst({
+          where: { accountId: a.id, date: { lte: to } },
+          orderBy: { date: 'desc' },
+          select: { balanceCents: true },
+        })
+        total += s?.balanceCents ?? 0
+      }
+      return total
+    }
+    async function sumCurrentBalances(types: ('CreditCard' | 'Loan' | 'Other')[]) {
+      const r = await db.account.aggregate({
+        where: { type: { in: types }, isActive: true },
+        _sum: { currentBalanceCents: true },
       })
-      return s?.balanceCents ?? 0
+      return r._sum.currentBalanceCents ?? 0
     }
 
+    const ccTotal   = await sumCurrentBalances(['CreditCard'])
+    const loanTotal = await sumCurrentBalances(['Loan'])
+    const invTotal  = await snapTotal(['Investment'])
+    const cryTotal  = await snapTotal(['Crypto'])
+
     const expected =
-      CHECKING_CENTS + SAVINGS_CENTS - CREDIT_CARD_CENTS - LOAN_CENTS +
-      (await snap('Investment')) + (await snap('Crypto'))
+      CHECKING_CENTS + SAVINGS_CENTS - ccTotal - loanTotal + invTotal + cryTotal
     expect(last.netWorthCents).toBe(expected)
   })
 })

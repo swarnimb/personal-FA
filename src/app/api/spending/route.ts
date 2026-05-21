@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getDateRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
-import { INCOME_CATEGORIES } from '@/lib/categories'
+import { SPENDING_EXCLUDED_CATEGORIES } from '@/lib/categories'
 import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 
@@ -16,7 +16,7 @@ async function getSpendingBreakdown(
   from: Date,
   to: Date,
 ): Promise<{ totalCents: number; byCategory: { category: string; totalCents: number; percentage: number }[] }> {
-  const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
+  const exclList = Prisma.join(SPENDING_EXCLUDED_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<SpendingRow[]>(Prisma.sql`
     WITH spending AS (
       SELECT
@@ -25,7 +25,7 @@ async function getSpendingBreakdown(
       FROM "Transaction"
       WHERE "amountCents" < 0
         AND status = 'confirmed'
-        AND category NOT IN (${incomeList})
+        AND category NOT IN (${exclList})
         AND date >= ${from}
         AND date <= ${to}
       GROUP BY category
