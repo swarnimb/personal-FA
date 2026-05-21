@@ -2,7 +2,11 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { isDemoMode } from './demo-mode'
 
 const ALGORITHM = 'aes-256-gcm'
-const IV_LENGTH = 16
+// AES-GCM IV is 12 bytes (96 bits) per NIST SP 800-38D §8.2 recommendation.
+// Decrypt accepts any IV length (IV is passed explicitly, not derived from
+// this constant) so pre-existing 16-byte IVs in stored credentials continue
+// to decrypt correctly — only new encryptions use 12 bytes. See FB-16.
+const IV_LENGTH = 12
 const KEY_BYTE_LENGTH = 32
 const KEY_HEX_LENGTH = KEY_BYTE_LENGTH * 2
 

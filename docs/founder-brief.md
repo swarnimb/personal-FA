@@ -238,3 +238,37 @@
 **Check before approving:** The hook is opt-in per clone — you must run `git config core.hooksPath .githooks` in each clone before it activates. Verify with `git config core.hooksPath` (expect `.githooks`). The hook itself was tested both paths during Task 76: silent skip when the seed file is unstaged; clean non-interactive diagnostic block when staged. Bypassable via `git commit --no-verify` — that's a deliberate audit-trail-leaving choice, not a silent fall-through. If you ever clone fresh and forget to enable it, you will get no prompt — the safety net is your habit of running the one-line setup after every clone (or wrapping it into a personal post-clone routine).
 
 **What this closes off:** Logging this as a binding decision (CONSTRAINT-14) means future maintainers cannot quietly remove the hook without re-opening the decision. The confirmation phrase is intentionally a sentence ("yes, no PII"), not a single character, to defeat muscle-memory `y` responses. Husky and lint-staged were rejected as overkill for a single-file guard: `core.hooksPath` + a ~60-line POSIX shell script does the job without adding a dev dependency or a new build step. CI-side enforcement (a GitHub Action that re-runs the same check on PRs) was considered but rejected for V1.0 — the hook is the line of defense; CI doubling it would add complexity for a single-user repo.
+
+---
+
+## FB-16: AES-GCM IV Length Aligned to NIST (16 → 12 bytes)
+
+**Date:** 2026-05-20
+**Architecture section:** `docs/architecture.md` § Security Architecture → encryption-at-rest
+**Plan reference:** Task 77 in `docs/plan.md`
+**Security report reference:** `docs/security-report.md` Finding L1 (now RESOLVED)
+
+**Decided:** `src/lib/crypto.ts` now generates 12-byte (96-bit) IVs for AES-256-GCM, aligning with the NIST SP 800-38D §8.2 canonical IV length. Prior implementation used 16-byte IVs. The change is one constant + an explanatory comment; the `decrypt()` function accepts any IV length because the IV is passed as an explicit parameter (read from the stored row), so pre-existing 16-byte-IV ciphertexts in `SimplefinConnection.iv` and `ExchangeConnection.iv` continue to decrypt correctly without migration. Only **new** encryptions write 12-byte IVs going forward.
+
+**Means for your product:** No user-facing impact. No data migration. The encryption posture is now compatible with strict-mode crypto libraries (older AWS SDK builds, certain HSM SDKs) that reject GCM IVs other than 12 bytes — useful if AmIBroke ever needs to interop with one. Per-operation overhead drops microscopically because the cipher no longer needs the internal GHASH step required to derive J₀ for non-96-bit IVs. The security level is unchanged in practice for this threat model (single-user, encrypted credentials at rest, used at sync time only). 221/221 unit tests + 8/8 integration tests stayed green across the change.
+
+**Check before approving:** No action needed. Any new credentials added after Task 77's merge get 12-byte IVs automatically. Old ones stay readable. If you ever audit the database, you will see a mix of 24-char-hex (12-byte) and 32-char-hex (16-byte) IV strings — that is correct and expected; both decrypt with the same code path. If you wanted uniform IVs across all rows, a one-time re-encryption migration would be needed (read each row, decrypt with stored IV, re-encrypt with `encrypt()`, write back) — explicitly **not** done because there is no security benefit.
+
+**What this closes off:** Nothing of substance. If a future NIST update revisits the recommendation, the constant is one line to change. Going *back* to 16 bytes would be a regression — don't.
+
+---
+
+## FB-17: PostCSS GHSA-qx2v in Next.js Bundled Deps — Upstream-Monitored, Not Patched Locally
+
+**Date:** 2026-05-20
+**Architecture section:** `docs/architecture.md` § Tech Stack → Next.js dependency posture
+**Plan reference:** Task 77 in `docs/plan.md`
+**Security report reference:** `docs/security-report.md` Finding M2 (ongoing, monitored)
+
+**Decided:** Two Moderate `postcss` advisories (GHSA-qx2v, "PostCSS XSS via Unescaped `</style>` in CSS Source Maps") will continue to surface in `npm audit --omit=dev` until Next.js itself bumps its internal `postcss` dependency. We are **not** applying any local workaround. npm's only suggested "fix" is downgrading Next.js to v9 — a catastrophic major rollback that would break the entire app. `npm overrides` to force a newer `postcss` was considered and rejected: PostCSS is loaded by Next's compiler from a bundled path, not by our `tailwindcss` toolchain, so a top-level override does not reach it without forking. The risk for AmIBroke is near-zero because the PostCSS XSS vector requires processing **attacker-controlled CSS at runtime**, and AmIBroke compiles only trusted source CSS at build time — the demo's static export has no runtime CSS pipeline, and V1.0's local-only deployment never receives untrusted CSS input.
+
+**Means for your product:** Every time you run `npm audit` after this session, expect 2 Moderates to remain visible. They are tracked as M2 in the (gitignored) `docs/security-report.md` and as this FB entry in version control. The audit report is **not noise to ignore**; it is "watch for change" — specifically watch for the Moderate count to drop after a Next.js patch/minor bump. When it does, that is the upstream fix landing, and no action is required on our side.
+
+**Check before approving:** Re-check trigger is concrete: after any `npm install`, `npm update`, or `npm audit fix` that updates the `next` package, re-run `npm audit --omit=dev` and confirm the M2 advisories are either still present (Next has not yet bumped postcss internally — fine, continue monitoring) or gone (Next bumped postcss — log it in `session-log.md` and update `security-report.md` M2 status to RESOLVED). Do **not** chase this by adding a `npm overrides` block, forking Next, or pinning `postcss` at the top level — those introduce their own breakage risk that exceeds the latent advisory risk.
+
+**What this closes off:** Treating Moderate-severity advisories inside a framework's bundled toolchain as a project-level fix obligation. The mental model is: "If npm audit shows a Moderate inside `node_modules/next/node_modules/postcss`, and the only fix is a major-version downgrade of `next`, the correct action is to monitor upstream, not patch downstream." This decision is portable to any future similar finding (e.g., a transitive dep inside Prisma's bundle, a dep inside `next/font` resolver). The monitoring contract is encoded in `security-report.md` § "Re-run trigger" plus this FB entry.

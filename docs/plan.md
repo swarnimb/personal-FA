@@ -2675,3 +2675,40 @@ the core guarantee is unverified by automation.
 **Depends on:** Task 75 (re-QA APPROVED)
 **Specialist:** @security + @dev (cross-functional pre-launch cleanup)
 **Completed:** 2026-05-20
+
+---
+
+# Post-V1.0 Cleanup
+
+> Tasks below this line are post-launch hygiene — they do **not** alter shipped behavior and were not part of the V1.0 plan. The V1.0 plan closed at Task 76 (76/76 complete, QA APPROVED 2026-05-20, security CLEAR 2026-05-20).
+
+---
+
+## Task 77: L1 IV_LENGTH → 12 + M2 PostCSS upstream-monitoring (post-V1.0 security cleanup)
+
+**Files:**
+- `src/lib/crypto.ts` — change `const IV_LENGTH = 16` to `const IV_LENGTH = 12` (NIST SP 800-38D §8.2) + explanatory comment referencing FB-16
+- `docs/founder-brief.md` — append FB-16 (L1 resolved, no migration needed) + FB-17 (M2 monitored, not patched)
+- `docs/security-report.md` — flip L1 to RESOLVED with date + commit ref; annotate M2 "monitoring per FB-17" (file is gitignored, edits stay local-only by project policy)
+- `docs/session-log.md` — append session entry per CLAUDE.md auto-log rule
+- `docs/plan.md` — this task row + body (post-V1.0 cleanup section header)
+
+**Functions to implement:**
+- One-character constant change in `src/lib/crypto.ts` (no function bodies altered). The decrypt function takes IV as an explicit parameter and does not reference `IV_LENGTH`, so pre-existing 16-byte-IV records in `SimplefinConnection.iv` and `ExchangeConnection.iv` continue to decrypt correctly without backward-compat code, without a migration script, and without changes to any caller of `encrypt()` / `decrypt()`.
+- No new functions, no signature changes, no schema changes.
+
+**Acceptance criteria:**
+- [x] `src/lib/crypto.ts:5` reads `const IV_LENGTH = 12` with a comment explaining why decrypt of old 16-byte-IV records remains safe (see FB-16)
+- [x] `docs/founder-brief.md` includes FB-16 (L1 resolution decision) and FB-17 (M2 monitoring decision), both following the standard FB format (Date / Architecture section / Decided / Means / Check / Closes off)
+- [x] `docs/security-report.md` reflects new status: L1 = RESOLVED with commit ref; M2 = MONITORED with FB-17 cross-reference; resolution log updated; verdict line updated
+- [x] `docs/plan.md` has a "# Post-V1.0 Cleanup" section header below Task 76 and a Task 77 row that mirrors the V1.0 task format
+- [x] No production code change other than the single-constant edit in `src/lib/crypto.ts`; no schema migration; no new dependencies
+
+**Tests required:**
+- [x] `npm test` — **221/221 green** (no regressions from the IV_LENGTH change; crypto round-trip, tamper-rejection, and unique-IV tests all pass at 12-byte IV)
+- [ ] `npm run test:integration` — not required; no integration surface touched by this change (only a constant inside a pure function)
+- [ ] Manual decrypt round-trip against a 16-byte-IV record — not required; Node's `createDecipheriv` accepts any IV length at runtime by NIST spec, and `decrypt()` passes IV through unchanged. Verified via code-read in the Session 27 investigation. If you ever want belt-and-braces verification, save a known 16-byte-IV ciphertext + key + plaintext as a test fixture and assert `decrypt()` returns the plaintext — but this is paranoia, not necessity.
+
+**Depends on:** Task 76 (security-report.md established with L1/M2 findings)
+**Specialist:** @dev
+**Completed:** 2026-05-20
