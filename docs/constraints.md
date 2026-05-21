@@ -182,6 +182,18 @@
 
 ---
 
+### CONSTRAINT-15: Internal transfers (Transfer Out category) excluded from Spending view
+
+**Decision:** Every spending-side query — `getSpendingBreakdown`, `getPreviousPeriodSpending`, `getMonthlyAverageSpending`, `getSpendingTransactions` (in `src/lib/spending-queries.ts`), `getSpendingByCategory` (in `src/lib/dashboard-queries.ts`), and the inline API-route copies in `src/app/api/dashboard/route.ts` + `src/app/api/spending/route.ts` — must filter on `SPENDING_EXCLUDED_CATEGORIES`, which combines `INCOME_CATEGORIES` with `Transfer Out`. Transactions categorised as `Transfer Out` represent internal money movement between user-owned accounts (CC payoffs, investment contributions, loan principal payments) and are not expenses in the wealth-impact sense.
+
+**What it means in practice:** Aggregated spending views (breakdown chart, totals, monthly averages, transaction lists filtered to "spending") hide internal transfers. The transactions still exist in the database and appear in unfiltered transaction lists. Income views continue to filter on `INCOME_CATEGORIES` (inclusion); the two filters are not interchangeable. Any new spending-style query must import `SPENDING_EXCLUDED_CATEGORIES` from `src/lib/categories.ts` — never re-define the exclusion set locally.
+
+**Who decided and when:** Task 78 / FB-18, builder approved 2026-05-21.
+
+**What this closes off:** Reverting to "all negative-amount transactions are spending" reintroduces the distortion FB-18 fixes: mid-career investment contributions (~$3k/mo) would dominate the Spending breakdown and bury actual recurring expenses. Spending-side queries quietly drifting back to the old `INCOME_CATEGORIES` filter is also a regression — they must use `SPENDING_EXCLUDED_CATEGORIES`.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -200,3 +212,4 @@
 | 12 | Cash Flow uses liquid cash = Checking+Savings only | Never fold liability balances into cash-flow figures | Task 51 / FB-13 / builder | 2026-05-15 |
 | 13 | Financial query fns in shared `src/lib/` module | Never page-private; must be integration-testable | QA finding / builder | 2026-05-15 |
 | 14 | seed-demo.ts requires pre-commit confirmation | `.githooks/pre-commit` prompts on every staged change; non-interactive blocked | Task 76 / @security / builder | 2026-05-20 |
+| 15 | Internal transfers excluded from Spending view | All spending-side queries filter on `SPENDING_EXCLUDED_CATEGORIES` (income + `Transfer Out`) | Task 78 / FB-18 / builder | 2026-05-21 |
