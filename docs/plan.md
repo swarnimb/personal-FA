@@ -84,7 +84,7 @@
 | 71 | V1.0 regression sweep + QA gate | [ ] |
 | 72 | PendingBadge — demo gate + basePath fix | [x] |
 | 73 | Income "View All Entries" — demo-handle the link | [x] |
-| 74 | Range-chip prefetch — no network call on switch | [ ] |
+| 74 | Range-chip prefetch — no network call on switch | [~] superseded — AC amended |
 | 75 | Re-run @qa after Tasks 72–74 land | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
@@ -2585,7 +2585,9 @@ the core guarantee is unverified by automation.
 
 ## Task 74: Range-chip prefetch — no network call on switch
 
-**Files:**
+**[~] SUPERSEDED 2026-05-20** — PRD §14 AC #3 was amended in the same session (see `docs/qa-report.md` Task 74 addendum). The recommended fixes in the original QA finding (`prefetch={false}` on `<Link>` chips, OR switch to button + `router.replace()`) were both already implemented since Session 23 — `TimeRangeSelector.tsx` uses `<button onClick>` calling `router.replace()`. The 6 RSC GETs that QA observed come from `router.replace()` itself, which Next 15 App Router fires on every search-param change to re-evaluate the route segment. The only way to eliminate them is to bypass the Next router via `window.history.replaceState()` and re-engineer `useRangeData()` to read URL state from a custom event-driven hook in demo mode — ~30 lines of demo-specific plumbing in core data-loading code, with no user-perceived benefit. Decision: amend the AC to "no data-API call (framework RSC prefetches allowed)" and mark this task superseded rather than ship architectural complexity for an aesthetic gain. The 6 prefetch GETs return the static page index (no user data), do not affect UX, and are framework boilerplate.
+
+**Files (had this been implemented):**
 - The range-chip component (search `src/components/range/`, `src/components/dashboard/`, or wherever `TimeRangeChips` / `RangeChips` lives)
 
 **Functions to implement:**

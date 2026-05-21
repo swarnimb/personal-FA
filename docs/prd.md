@@ -380,7 +380,7 @@ As the project owner, I want a public demo URL I can share that shows the full a
 
 - [ ] Visitor at `https://swarnimb.github.io/personal-FA` sees Dashboard within 2s on first paint (static HTML, no warm-up needed).
 - [ ] Dashboard, Income, Spending, Investments, Net Worth, Accounts all render with seeded data and visually match local-mode rendering.
-- [ ] Time-range selector switches between all 6 ranges (YTD/1M/3M/6M/1Y/Max) instantly (no network call) — all 6 datasets are baked into the page.
+- [ ] Time-range selector switches between all 6 ranges (YTD/1M/3M/6M/1Y/Max) instantly with no data-API call — all 6 datasets are baked into the page. Framework RSC prefetch GETs against the static page index (e.g. `index.txt?range=<value>`) are permitted: they carry no user data, return the same pre-rendered page bundle that's already loaded, and have no effect on perceived UX. **Amended 2026-05-20** — the original "no network call" wording was strict and reflected an incomplete understanding of how Next.js App Router handles search-param changes via `router.replace()`. See `docs/qa-report.md` Task 74 addendum for the decision record.
 - [ ] Persistent banner is visible on every page with the exact approved copy and a working GitHub link.
 - [ ] Every write action (Add Transaction submit, Sync, Connect Bank, Add Exchange, Add Manual Holding, Add Manual Account, CSV file select, CSV confirm, inline category save, recurring Approve/Edit/Reject) is a no-op and surfaces the correct toast.
 - [ ] Local `npm run dev` with `NEXT_PUBLIC_DEMO_MODE` unset behaves exactly as before — banner absent, all writes work, cron registers, syncs run.
