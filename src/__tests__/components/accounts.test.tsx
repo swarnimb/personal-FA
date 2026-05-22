@@ -41,6 +41,14 @@ const MOCK_UNREVIEWED_CARDS = [
   { id: 'acc-9', name: 'Mystery Account', institution: 'Wells Fargo', type: 'Other', typeConfirmed: false, currentBalanceCents: 9900, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
 ]
 
+// Spans all four tab categories — used to exercise the INVESTMENTS filter.
+const MOCK_MIXED_CARDS = [
+  { id: 'acc-1', name: 'Chase Checking', institution: 'Chase', type: 'Checking', typeConfirmed: true, currentBalanceCents: 500000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-3', name: 'Visa Card', institution: null, type: 'CreditCard', typeConfirmed: true, currentBalanceCents: -80000, lastSyncedAt: null, syncStatus: 'never' as const },
+  { id: 'acc-4', name: 'Fidelity Brokerage', institution: 'Fidelity', type: 'Investment', typeConfirmed: true, currentBalanceCents: 3400000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-5', name: 'Coinbase Wallet', institution: 'Coinbase', type: 'Crypto', typeConfirmed: true, currentBalanceCents: 150000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+]
+
 describe('SyncStatusPanel', () => {
   it('renders connection counts', () => {
     render(<ToastProvider><SyncStatusPanel activeConnections={3} manualItems={2} lastSyncAt={null} /></ToastProvider>)
@@ -96,6 +104,19 @@ describe('ConnectedInstitutions', () => {
     await user.click(screen.getByRole('button', { name: 'DEBT' }))
     expect(screen.queryByText('Chase Checking')).not.toBeInTheDocument()
     expect(screen.getByText('Visa Card')).toBeInTheDocument()
+  })
+
+  it('INVESTMENTS tab filters the list to Investment and Crypto accounts', async () => {
+    const user = userEvent.setup()
+    renderList(MOCK_MIXED_CARDS)
+
+    // Click INVESTMENTS tab — only Investment/Crypto accounts remain
+    await user.click(screen.getByRole('button', { name: 'INVESTMENTS' }))
+    expect(screen.getByText('Fidelity Brokerage')).toBeInTheDocument()
+    expect(screen.getByText('Coinbase Wallet')).toBeInTheDocument()
+    // Cash and debt accounts are excluded
+    expect(screen.queryByText('Chase Checking')).not.toBeInTheDocument()
+    expect(screen.queryByText('Visa Card')).not.toBeInTheDocument()
   })
 
   it('confirmed accounts have an editable type dropdown but no Confirm button', () => {
