@@ -25,6 +25,7 @@ export interface SimplefinAccount {
   currency: string
   balance: string
   'balance-date': number
+  org?: { name?: string; domain?: string }
   holdings?: SimplefinHolding[]
   transactions?: RawSimplefinTransaction[]
 }

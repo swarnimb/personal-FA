@@ -140,4 +140,65 @@ describe('syncSimplefin', () => {
     expect(result.updated).toBe(0)
     expect(result.accountsSynced).toBe(1)
   })
+
+  it('captures the institution from the org object on a new account', async () => {
+    const connection = {
+      id: 'conn-001',
+      encryptedAccessUrl: 'enc',
+      iv: 'iv',
+      authTag: 'tag',
+      lastSyncedAt: null,
+      firstSyncedAt: null,
+    }
+    mockDb.simplefinConnection.findMany.mockResolvedValue([connection])
+    mockDb.simplefinConnection.update.mockResolvedValue(connection)
+    mockDb.account.findUnique.mockResolvedValue(null)
+    mockFetchAccounts.mockResolvedValue([
+      {
+        id: 'sf-1',
+        name: 'EVERYDAY CHECKING',
+        balance: '100.00',
+        'balance-date': 0,
+        org: { name: 'Wells Fargo', domain: 'wellsfargo.com' },
+      },
+    ])
+    mockFetchTransactions.mockResolvedValue([])
+    mockDb.account.upsert.mockResolvedValue({ id: 'db-1' })
+
+    await syncSimplefin()
+
+    const call = mockDb.account.upsert.mock.calls[0][0] as { create: Record<string, unknown> }
+    expect(call.create.institution).toBe('Wells Fargo')
+  })
+
+  it('does not overwrite the account name when re-syncing an existing account', async () => {
+    const connection = {
+      id: 'conn-001',
+      encryptedAccessUrl: 'enc',
+      iv: 'iv',
+      authTag: 'tag',
+      lastSyncedAt: null,
+      firstSyncedAt: null,
+    }
+    mockDb.simplefinConnection.findMany.mockResolvedValue([connection])
+    mockDb.simplefinConnection.update.mockResolvedValue(connection)
+    mockDb.account.findUnique.mockResolvedValue({ type: 'Checking' })
+    mockFetchAccounts.mockResolvedValue([
+      {
+        id: 'sf-1',
+        name: 'GENERIC SIMPLEFIN NAME',
+        balance: '100.00',
+        'balance-date': 0,
+        org: { name: 'Wells Fargo' },
+      },
+    ])
+    mockFetchTransactions.mockResolvedValue([])
+    mockDb.account.upsert.mockResolvedValue({ id: 'db-1' })
+
+    await syncSimplefin()
+
+    const call = mockDb.account.upsert.mock.calls[0][0] as { update: Record<string, unknown> }
+    expect(call.update).not.toHaveProperty('name')
+    expect(call.update.institution).toBe('Wells Fargo')
+  })
 })

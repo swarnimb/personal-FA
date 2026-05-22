@@ -21,6 +21,7 @@ export default async function AccountsPage() {
   const toCard = (a: (typeof accounts)[number]) => ({
     id: a.id,
     name: a.name,
+    institution: a.institution,
     type: a.type as string,
     typeConfirmed: a.typeConfirmed,
     currentBalanceCents: a.currentBalanceCents,

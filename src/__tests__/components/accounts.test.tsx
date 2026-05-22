@@ -31,14 +31,14 @@ const MOCK_ALL_ACCOUNTS = [
 ]
 
 const MOCK_ACCOUNT_CARDS = [
-  { id: 'acc-1', name: 'Chase Checking', type: 'Checking', typeConfirmed: true, currentBalanceCents: 500000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
-  { id: 'acc-2', name: 'Ally Savings', type: 'Savings', typeConfirmed: true, currentBalanceCents: 1200000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
-  { id: 'acc-3', name: 'Visa Card', type: 'CreditCard', typeConfirmed: true, currentBalanceCents: -80000, lastSyncedAt: null, syncStatus: 'never' as const },
+  { id: 'acc-1', name: 'Chase Checking', institution: 'Chase', type: 'Checking', typeConfirmed: true, currentBalanceCents: 500000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-2', name: 'Ally Savings', institution: 'Ally Bank', type: 'Savings', typeConfirmed: true, currentBalanceCents: 1200000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-3', name: 'Visa Card', institution: null, type: 'CreditCard', typeConfirmed: true, currentBalanceCents: -80000, lastSyncedAt: null, syncStatus: 'never' as const },
 ]
 
 // One unreviewed account (typeConfirmed: false) for review-affordance tests.
 const MOCK_UNREVIEWED_CARDS = [
-  { id: 'acc-9', name: 'Mystery Account', type: 'Other', typeConfirmed: false, currentBalanceCents: 9900, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-9', name: 'Mystery Account', institution: 'Wells Fargo', type: 'Other', typeConfirmed: false, currentBalanceCents: 9900, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
 ]
 
 describe('SyncStatusPanel', () => {
@@ -157,6 +157,79 @@ describe('ConnectedInstitutions', () => {
         })
       )
     })
+  })
+
+  it('shows the institution as muted context when present, nothing when null', () => {
+    renderList(MOCK_ACCOUNT_CARDS)
+    expect(screen.getByText('Chase')).toBeInTheDocument()
+    expect(screen.getByText('Ally Bank')).toBeInTheDocument()
+    // acc-3 (Visa Card) has institution: null — no institution line for it
+    expect(screen.queryByText('null')).not.toBeInTheDocument()
+  })
+
+  it('clicking the account name enters inline edit mode', async () => {
+    const user = userEvent.setup()
+    renderList(MOCK_ACCOUNT_CARDS)
+
+    await user.click(screen.getByRole('button', { name: 'Rename account Chase Checking' }))
+
+    expect(screen.getByLabelText('Account name for Chase Checking')).toHaveValue('Chase Checking')
+  })
+
+  it('saving a changed name PATCHes the account with the new name', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    renderList(MOCK_ACCOUNT_CARDS)
+
+    await user.click(screen.getByRole('button', { name: 'Rename account Chase Checking' }))
+    const input = screen.getByLabelText('Account name for Chase Checking')
+    await user.clear(input)
+    await user.type(input, 'Main Checking{Enter}')
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/accounts/acc-1',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Main Checking' }),
+        })
+      )
+    })
+  })
+
+  it('pressing Escape cancels the rename without a PATCH', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    renderList(MOCK_ACCOUNT_CARDS)
+
+    await user.click(screen.getByRole('button', { name: 'Rename account Chase Checking' }))
+    const input = screen.getByLabelText('Account name for Chase Checking')
+    await user.clear(input)
+    await user.type(input, 'Discarded Name{Escape}')
+
+    // Edit mode closed, original name restored, no PATCH fired
+    expect(screen.queryByLabelText('Account name for Chase Checking')).not.toBeInTheDocument()
+    expect(screen.getByText('Chase Checking')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('saving an unchanged name does not PATCH', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    renderList(MOCK_ACCOUNT_CARDS)
+
+    await user.click(screen.getByRole('button', { name: 'Rename account Chase Checking' }))
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByText('Chase Checking')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 

@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Landmark, Wallet, CreditCard, Bitcoin, PiggyBank, HelpCircle } from 'lucide-react'
+import { Landmark, Wallet, CreditCard, Bitcoin, PiggyBank, HelpCircle, Pencil } from 'lucide-react'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -11,6 +12,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 type AccountCard = {
   id: string
   name: string
+  institution: string | null
   type: string
   typeConfirmed: boolean
   currentBalanceCents: number
@@ -77,6 +79,8 @@ function AccountRow({ acc }: { acc: AccountCard }) {
   const router = useRouter()
   const toast = useToast()
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState(acc.name)
   const Icon = TYPE_ICONS[acc.type] ?? Landmark
   const needsReview = !acc.typeConfirmed
 
@@ -112,6 +116,29 @@ function AccountRow({ acc }: { acc: AccountCard }) {
 
   const handleConfirm = () => patchAccount({ typeConfirmed: true })
 
+  /** Open the inline name editor, seeding the draft from the current name. */
+  const startEditingName = () => {
+    setNameDraft(acc.name)
+    setIsEditingName(true)
+  }
+
+  /** Discard the draft and leave edit mode without saving. */
+  const cancelEditingName = () => {
+    setNameDraft(acc.name)
+    setIsEditingName(false)
+  }
+
+  /** Save the draft name — only PATCH when it is non-empty and changed. */
+  const saveName = () => {
+    setIsEditingName(false)
+    const trimmedName = nameDraft.trim()
+    if (!trimmedName || trimmedName === acc.name) {
+      setNameDraft(acc.name)
+      return
+    }
+    patchAccount({ name: trimmedName })
+  }
+
   return (
     <div
       className={`flex items-center gap-4 px-6 py-3 transition-colors duration-150 ${
@@ -122,7 +149,43 @@ function AccountRow({ acc }: { acc: AccountCard }) {
         <Icon size={16} className="text-on-surface-variant" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-inter text-sm text-on-surface font-medium truncate">{acc.name}</p>
+        {isEditingName ? (
+          <Input
+            autoFocus
+            value={nameDraft}
+            disabled={isSaving}
+            aria-label={`Account name for ${acc.name}`}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                saveName()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                cancelEditingName()
+              }
+            }}
+            className="h-7 px-2 py-1 font-inter text-sm font-medium"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={startEditingName}
+            disabled={isSaving}
+            aria-label={`Rename account ${acc.name}`}
+            className="group flex items-center gap-1.5 min-w-0 text-left disabled:pointer-events-none"
+          >
+            <span className="font-inter text-sm text-on-surface font-medium truncate">{acc.name}</span>
+            <Pencil
+              size={12}
+              className="text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+            />
+          </button>
+        )}
+        {acc.institution && (
+          <p className="font-inter text-xs text-on-surface-variant truncate">{acc.institution}</p>
+        )}
         {needsReview && (
           <p className="font-inter font-medium text-xs tracking-wider uppercase text-tertiary">
             Needs review
