@@ -20,10 +20,11 @@ type AccountCard = {
   syncStatus: 'synced' | 'never'
 }
 
-const TABS = ['ALL', 'CASH', 'DEBT'] as const
+const TABS = ['ALL', 'CASH', 'INVESTMENTS', 'DEBT'] as const
 type Tab = (typeof TABS)[number]
 
 const CASH_TYPES = ['Checking', 'Savings']
+const INVESTMENT_TYPES = ['Investment', 'Crypto']
 const DEBT_TYPES = ['CreditCard', 'Loan']
 
 /** The 7 AccountType enum values, in display order. */
@@ -222,7 +223,7 @@ function AccountRow({ acc }: { acc: AccountCard }) {
 }
 
 /**
- * Tabbed account list view with ALL / CASH / DEBT filters.
+ * Tabbed account list view with ALL / CASH / INVESTMENTS / DEBT filters.
  * Each account rendered as a single-column list row with icon, name,
  * an inline type dropdown, balance, and sync status.
  */
@@ -235,6 +236,7 @@ export function ConnectedInstitutions({
 
   const filtered = accounts.filter((a) => {
     if (activeTab === 'CASH') return CASH_TYPES.includes(a.type)
+    if (activeTab === 'INVESTMENTS') return INVESTMENT_TYPES.includes(a.type)
     if (activeTab === 'DEBT') return DEBT_TYPES.includes(a.type)
     return true
   })
