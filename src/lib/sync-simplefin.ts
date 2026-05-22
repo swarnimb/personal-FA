@@ -27,6 +27,7 @@ async function refreshHoldings(accountId: string, holdings: SimplefinHolding[]):
 async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string }> {
   const rawBalanceCents = Math.round(parseFloat(sfAccount.balance) * 100)
   const hasHoldings = (sfAccount.holdings ?? []).length > 0
+  const institution = sfAccount.org?.name ?? sfAccount.org?.domain ?? null
 
   // Preserve a user-corrected type across syncs — only infer for new accounts.
   const existing = await db.account.findUnique({
@@ -48,6 +49,7 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string 
     create: {
       externalId: sfAccount.id,
       name: sfAccount.name,
+      institution,
       type: accountType,
       typeConfirmed: false,
       source: AccountSource.SimpleFin,
@@ -57,7 +59,10 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string 
       lastSyncedAt: now,
     },
     update: {
-      name: sfAccount.name,
+      // `name` is intentionally NOT updated — the user may have renamed the
+      // account, and SimpleFin's generic name must not clobber that.
+      // `institution` stays SimpleFin-owned, so it is kept fresh.
+      institution,
       currentBalanceCents: balanceCents,
       hasHoldings,
       lastSyncedAt: now,
