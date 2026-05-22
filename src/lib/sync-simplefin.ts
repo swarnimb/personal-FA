@@ -1,19 +1,10 @@
-import { AccountSource, AccountType, TransactionStatus } from '@prisma/client'
+import { AccountSource, TransactionStatus } from '@prisma/client'
 import { decrypt } from './crypto'
 import { db } from './db'
 import { isDemoMode } from './demo-mode'
 import { fetchAccounts, fetchTransactions } from './simplefin'
+import { inferAccountType, normalizeBalanceCents } from './account-types'
 import type { SimplefinAccount, SimplefinHolding, SimplefinTransaction } from './simplefin'
-
-function inferAccountType(name: string): AccountType {
-  const lower = name.toLowerCase()
-  if (lower.includes('checking')) return AccountType.Checking
-  if (lower.includes('saving')) return AccountType.Savings
-  if (lower.includes('investment') || lower.includes('brokerage')) return AccountType.Investment
-  if (lower.includes('credit')) return AccountType.CreditCard
-  if (lower.includes('loan') || lower.includes('mortgage')) return AccountType.Loan
-  return AccountType.Other
-}
 
 async function refreshHoldings(accountId: string, holdings: SimplefinHolding[]): Promise<void> {
   await db.holding.deleteMany({ where: { accountId, isManual: false } })
@@ -34,24 +25,42 @@ async function refreshHoldings(accountId: string, holdings: SimplefinHolding[]):
 }
 
 async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string }> {
-  const balanceCents = Math.round(parseFloat(sfAccount.balance) * 100)
+  const rawBalanceCents = Math.round(parseFloat(sfAccount.balance) * 100)
   const hasHoldings = (sfAccount.holdings ?? []).length > 0
+
+  // Preserve a user-corrected type across syncs — only infer for new accounts.
+  const existing = await db.account.findUnique({
+    where: { externalId: sfAccount.id },
+    select: { type: true },
+  })
+  const accountType = existing
+    ? existing.type
+    : inferAccountType(sfAccount.name, hasHoldings, rawBalanceCents)
+
+  // SimpleFin reports debts as negative; the net-worth views expect
+  // liabilities stored positive (CONSTRAINT-11). Normalize at write time so
+  // the sign stays correct on every sync, for inferred and user-set types alike.
+  const balanceCents = normalizeBalanceCents(rawBalanceCents, accountType)
+  const now = new Date()
+
   const account = await db.account.upsert({
     where: { externalId: sfAccount.id },
     create: {
       externalId: sfAccount.id,
       name: sfAccount.name,
-      type: inferAccountType(sfAccount.name),
+      type: accountType,
+      typeConfirmed: false,
       source: AccountSource.SimpleFin,
       currentBalanceCents: balanceCents,
       hasHoldings,
       isActive: true,
+      lastSyncedAt: now,
     },
     update: {
       name: sfAccount.name,
       currentBalanceCents: balanceCents,
       hasHoldings,
-      lastSyncedAt: new Date(),
+      lastSyncedAt: now,
     },
   })
   if (hasHoldings) {
@@ -105,17 +114,19 @@ export async function syncSimplefin(): Promise<{
   inserted: number
   updated: number
   errors: string[]
+  accountsSynced: number
 }> {
   if (isDemoMode()) {
-    return { inserted: 0, updated: 0, errors: ['demo mode'] }
+    return { inserted: 0, updated: 0, errors: ['demo mode'], accountsSynced: 0 }
   }
   const connections = await db.simplefinConnection.findMany()
   if (connections.length === 0) {
-    return { inserted: 0, updated: 0, errors: [] }
+    return { inserted: 0, updated: 0, errors: [], accountsSynced: 0 }
   }
 
   let inserted = 0
   let updated = 0
+  let accountsSynced = 0
   const errors: string[] = []
 
   for (const connection of connections) {
@@ -133,6 +144,7 @@ export async function syncSimplefin(): Promise<{
         try {
           const account = await upsertAccount(sfAccount)
           accountIdMap.set(sfAccount.id, account.id)
+          accountsSynced++
         } catch (err) {
           errors.push(
             `Account "${sfAccount.name}": ${err instanceof Error ? err.message : String(err)}`,
@@ -171,5 +183,5 @@ export async function syncSimplefin(): Promise<{
     }
   }
 
-  return { inserted, updated, errors }
+  return { inserted, updated, errors, accountsSynced }
 }

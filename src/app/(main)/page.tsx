@@ -13,6 +13,7 @@ import { HeroNetWorth } from '@/components/dashboard/HeroNetWorth'
 import { SpendingConcentration } from '@/components/dashboard/SpendingConcentration'
 import { MonthlyCashFlow } from '@/components/dashboard/MonthlyCashFlow'
 import { RangeDataProvider } from '@/components/layout/RangeDataProvider'
+import { AccountReviewBanner } from '@/components/layout/AccountReviewBanner'
 import { DashboardRangeView, type DashboardRangeSlice } from './DashboardRangeView'
 
 /**
@@ -76,6 +77,7 @@ export default async function DashboardPage({
 
   return (
     <div className="flex flex-col gap-4 min-h-full">
+      <AccountReviewBanner />
       <div className="grid grid-cols-[1fr_380px] gap-4">
         <HeroNetWorth
           netWorthCents={netWorthCents}

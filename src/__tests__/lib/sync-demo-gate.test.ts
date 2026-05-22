@@ -96,7 +96,7 @@ describe('syncSimplefin demo gate', () => {
 
     const result = await syncSimplefin()
 
-    expect(result).toEqual({ inserted: 0, updated: 0, errors: ['demo mode'] })
+    expect(result).toEqual({ inserted: 0, updated: 0, errors: ['demo mode'], accountsSynced: 0 })
     expect(db.simplefinConnection.findMany).not.toHaveBeenCalled()
     expect(fetchAccounts).not.toHaveBeenCalled()
     expect(fetchTransactions).not.toHaveBeenCalled()

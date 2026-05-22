@@ -102,6 +102,46 @@ describe('PATCH /api/accounts/[id]', () => {
     expect(res.status).toBe(403)
     expect(body.error).toContain('manual')
   })
+
+  it('updates type, confirms it, and normalizes a liability balance positive', async () => {
+    vi.mocked(db.account.findUnique).mockResolvedValue(
+      makeAccount({ type: AccountType.Other, currentBalanceCents: -361767 }) as never,
+    )
+    vi.mocked(db.account.update).mockResolvedValue(makeAccount() as never)
+
+    const req = new Request('http://localhost/api/accounts/acc-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ type: 'CreditCard' }),
+    })
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'acc-1' }) })
+
+    expect(res.status).toBe(200)
+    expect(db.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'CreditCard',
+          typeConfirmed: true,
+          currentBalanceCents: 361767,
+        }),
+      }),
+    )
+  })
+
+  it('confirms a type without changing it', async () => {
+    vi.mocked(db.account.findUnique).mockResolvedValue(makeAccount() as never)
+    vi.mocked(db.account.update).mockResolvedValue(makeAccount() as never)
+
+    const req = new Request('http://localhost/api/accounts/acc-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ typeConfirmed: true }),
+    })
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'acc-1' }) })
+
+    expect(res.status).toBe(200)
+    expect(db.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { typeConfirmed: true } }),
+    )
+  })
 })
 
 describe('DELETE /api/accounts/[id]', () => {
