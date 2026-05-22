@@ -41,7 +41,7 @@ describe('runFullSync', () => {
   })
 
   it('creates SyncLog with running status', async () => {
-    vi.mocked(syncSimplefin).mockResolvedValue({ inserted: 0, updated: 0, errors: [] })
+    vi.mocked(syncSimplefin).mockResolvedValue({ inserted: 0, updated: 0, errors: [], accountsSynced: 0 })
 
     await runFullSync()
 
@@ -50,22 +50,23 @@ describe('runFullSync', () => {
     })
   })
 
-  it('updates to success when all pass', async () => {
-    vi.mocked(syncSimplefin).mockResolvedValue({ inserted: 5, updated: 2, errors: [] })
+  it('updates to success and records the SimpleFin account count', async () => {
+    vi.mocked(syncSimplefin).mockResolvedValue({ inserted: 5, updated: 2, errors: [], accountsSynced: 3 })
 
     const result = await runFullSync()
 
     expect(result.status).toBe(SyncStatus.success)
     expect(result.transactionsInserted).toBe(5)
+    expect(result.accountsSynced).toBe(3)
     expect(db.syncLog.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: SyncStatus.success }),
+        data: expect.objectContaining({ status: SyncStatus.success, accountsSynced: 3 }),
       }),
     )
   })
 
   it('updates to partial when one exchange fails', async () => {
-    vi.mocked(syncSimplefin).mockResolvedValue({ inserted: 0, updated: 0, errors: [] })
+    vi.mocked(syncSimplefin).mockResolvedValue({ inserted: 0, updated: 0, errors: [], accountsSynced: 0 })
     vi.mocked(db.exchangeConnection.findMany).mockResolvedValue([{ id: 'conn-1' } as never])
     vi.mocked(syncExchange).mockRejectedValue(new Error('Invalid API credentials: Coinbase'))
 

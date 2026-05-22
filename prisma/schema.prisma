@@ -64,6 +64,7 @@ model Account {
   id                   String             @id @default(uuid())
   name                 String
   type                 AccountType
+  typeConfirmed        Boolean            @default(false)
   source               AccountSource
   externalId           String?            @unique
   currentBalanceCents  Int                @default(0)

@@ -31,9 +31,14 @@ const MOCK_ALL_ACCOUNTS = [
 ]
 
 const MOCK_ACCOUNT_CARDS = [
-  { id: 'acc-1', name: 'Chase Checking', type: 'Checking', currentBalanceCents: 500000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
-  { id: 'acc-2', name: 'Ally Savings', type: 'Savings', currentBalanceCents: 1200000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
-  { id: 'acc-3', name: 'Visa Card', type: 'CreditCard', currentBalanceCents: -80000, lastSyncedAt: null, syncStatus: 'never' as const },
+  { id: 'acc-1', name: 'Chase Checking', type: 'Checking', typeConfirmed: true, currentBalanceCents: 500000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-2', name: 'Ally Savings', type: 'Savings', typeConfirmed: true, currentBalanceCents: 1200000, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
+  { id: 'acc-3', name: 'Visa Card', type: 'CreditCard', typeConfirmed: true, currentBalanceCents: -80000, lastSyncedAt: null, syncStatus: 'never' as const },
+]
+
+// One unreviewed account (typeConfirmed: false) for review-affordance tests.
+const MOCK_UNREVIEWED_CARDS = [
+  { id: 'acc-9', name: 'Mystery Account', type: 'Other', typeConfirmed: false, currentBalanceCents: 9900, lastSyncedAt: '2026-04-13T10:00:00Z', syncStatus: 'synced' as const },
 ]
 
 describe('SyncStatusPanel', () => {
@@ -58,27 +63,28 @@ describe('SyncStatusPanel', () => {
 })
 
 describe('ConnectedInstitutions', () => {
-  it('renders all accounts as list rows under ALL tab', () => {
+  const renderList = (accounts: typeof MOCK_ACCOUNT_CARDS) =>
     render(
-      <PrivacyProvider>
-        <ConnectedInstitutions accounts={MOCK_ACCOUNT_CARDS} />
-      </PrivacyProvider>
+      <ToastProvider>
+        <PrivacyProvider>
+          <ConnectedInstitutions accounts={accounts} />
+        </PrivacyProvider>
+      </ToastProvider>
     )
+
+  it('renders all accounts as list rows under ALL tab', () => {
+    renderList(MOCK_ACCOUNT_CARDS)
     expect(screen.getByText('Chase Checking')).toBeInTheDocument()
     expect(screen.getByText('Ally Savings')).toBeInTheDocument()
     expect(screen.getByText('Visa Card')).toBeInTheDocument()
-    // Verify list row structure — type labels rendered
-    expect(screen.getByText('Checking')).toBeInTheDocument()
-    expect(screen.getByText('Credit Card')).toBeInTheDocument()
+    // Each row exposes an inline account-type dropdown
+    expect(screen.getByLabelText('Account type for Chase Checking')).toBeInTheDocument()
+    expect(screen.getByLabelText('Account type for Visa Card')).toBeInTheDocument()
   })
 
   it('filters accounts by tab selection', async () => {
     const user = userEvent.setup()
-    render(
-      <PrivacyProvider>
-        <ConnectedInstitutions accounts={MOCK_ACCOUNT_CARDS} />
-      </PrivacyProvider>
-    )
+    renderList(MOCK_ACCOUNT_CARDS)
 
     // Click CASH tab
     await user.click(screen.getByRole('button', { name: 'CASH' }))
@@ -90,6 +96,67 @@ describe('ConnectedInstitutions', () => {
     await user.click(screen.getByRole('button', { name: 'DEBT' }))
     expect(screen.queryByText('Chase Checking')).not.toBeInTheDocument()
     expect(screen.getByText('Visa Card')).toBeInTheDocument()
+  })
+
+  it('confirmed accounts have an editable type dropdown but no Confirm button', () => {
+    renderList(MOCK_ACCOUNT_CARDS)
+    expect(screen.getByLabelText('Account type for Chase Checking')).toBeInTheDocument()
+    // No "needs review" affordance for confirmed accounts
+    expect(screen.queryByText('Needs review')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /confirm account type/i })).not.toBeInTheDocument()
+  })
+
+  it('unreviewed accounts show a "needs review" label and Confirm button', () => {
+    renderList(MOCK_UNREVIEWED_CARDS)
+    expect(screen.getByText('Needs review')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Confirm account type for Mystery Account' })
+    ).toBeInTheDocument()
+  })
+
+  it('clicking Confirm PATCHes the account with typeConfirmed: true', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    renderList(MOCK_UNREVIEWED_CARDS)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm account type for Mystery Account' })
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/accounts/acc-9',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ typeConfirmed: true }),
+        })
+      )
+    })
+  })
+
+  it('changing the type dropdown PATCHes the account with the new type', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    renderList(MOCK_ACCOUNT_CARDS)
+
+    await user.click(screen.getByLabelText('Account type for Chase Checking'))
+    await user.click(screen.getByRole('option', { name: 'Savings' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/accounts/acc-1',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'Savings' }),
+        })
+      )
+    })
   })
 })
 

@@ -7,7 +7,7 @@ vi.mock('@/lib/db', () => ({
       update: vi.fn(),
       deleteMany: vi.fn(),
     },
-    account: { upsert: vi.fn() },
+    account: { upsert: vi.fn(), findUnique: vi.fn() },
     holding: { deleteMany: vi.fn(), create: vi.fn() },
     transaction: {
       findUnique: vi.fn(),
@@ -37,7 +37,7 @@ type MockFn = ReturnType<typeof vi.fn>
 
 const mockDb = db as unknown as {
   simplefinConnection: { findMany: MockFn; update: MockFn; deleteMany: MockFn }
-  account: { upsert: MockFn }
+  account: { upsert: MockFn; findUnique: MockFn }
   holding: { deleteMany: MockFn; create: MockFn }
   transaction: { findUnique: MockFn; create: MockFn; update: MockFn }
 }
@@ -110,7 +110,7 @@ describe('syncSimplefin', () => {
     vi.clearAllMocks()
   })
 
-  it('returns partial result with errors when one account fails', async () => {
+  it('returns partial result with errors and an account count when one account fails', async () => {
     const connection = {
       id: 'conn-001',
       encryptedAccessUrl: 'enc',
@@ -121,6 +121,7 @@ describe('syncSimplefin', () => {
     }
     mockDb.simplefinConnection.findMany.mockResolvedValue([connection])
     mockDb.simplefinConnection.update.mockResolvedValue(connection)
+    mockDb.account.findUnique.mockResolvedValue(null)
 
     const goodAccount = { id: 'sf-good', name: 'Checking', balance: '1000.00', 'balance-date': 0 }
     const badAccount = { id: 'sf-bad', name: 'Savings', balance: '500.00', 'balance-date': 0 }
@@ -137,5 +138,6 @@ describe('syncSimplefin', () => {
     expect(result.errors[0]).toContain('Savings')
     expect(result.inserted).toBe(0)
     expect(result.updated).toBe(0)
+    expect(result.accountsSynced).toBe(1)
   })
 })

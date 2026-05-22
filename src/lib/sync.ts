@@ -49,6 +49,7 @@ export async function runFullSync(syncLogId?: string): Promise<SyncResult> {
     const result = await syncSimplefin()
     transactionsInserted += result.inserted
     transactionsUpdated += result.updated
+    accountsSynced += result.accountsSynced
     errors.push(...result.errors)
   } catch (err) {
     errors.push(`SimpleFin: ${err instanceof Error ? err.message : String(err)}`)

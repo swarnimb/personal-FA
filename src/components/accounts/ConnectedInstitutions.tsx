@@ -1,13 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Landmark, Wallet, CreditCard, Bitcoin, PiggyBank } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Landmark, Wallet, CreditCard, Bitcoin, PiggyBank, HelpCircle } from 'lucide-react'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
+import { useToast } from '@/components/ui/ToastProvider'
 
 type AccountCard = {
   id: string
   name: string
   type: string
+  typeConfirmed: boolean
   currentBalanceCents: number
   lastSyncedAt: string | null
   syncStatus: 'synced' | 'never'
@@ -19,6 +24,9 @@ type Tab = (typeof TABS)[number]
 const CASH_TYPES = ['Checking', 'Savings']
 const DEBT_TYPES = ['CreditCard', 'Loan']
 
+/** The 7 AccountType enum values, in display order. */
+const ACCOUNT_TYPES = ['Checking', 'Savings', 'Investment', 'Crypto', 'CreditCard', 'Loan', 'Other'] as const
+
 const TYPE_ICONS: Record<string, typeof Landmark> = {
   Checking: Wallet,
   Savings: PiggyBank,
@@ -26,6 +34,7 @@ const TYPE_ICONS: Record<string, typeof Landmark> = {
   Loan: Landmark,
   Investment: Landmark,
   Crypto: Bitcoin,
+  Other: HelpCircle,
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,6 +44,14 @@ const TYPE_LABELS: Record<string, string> = {
   Loan: 'Loan',
   Investment: 'Investment',
   Crypto: 'Crypto',
+  Other: 'Other',
+}
+
+class AccountUpdateError extends Error {
+  constructor(message: string) {
+    super(`Failed to update account: ${message}`)
+    this.name = 'AccountUpdateError'
+  }
 }
 
 function SyncBadge({ status }: { status: 'synced' | 'never' }) {
@@ -49,8 +66,102 @@ function SyncBadge({ status }: { status: 'synced' | 'never' }) {
 }
 
 /**
+ * Single account list row. Owns the inline type-editing state so that a
+ * pending PATCH on one row never disables the controls of another.
+ *
+ * Accounts with `typeConfirmed === false` get a "needs review" tint plus a
+ * Confirm button. Changing the type also confirms the account server-side,
+ * so the review treatment clears on the next `router.refresh()`.
+ */
+function AccountRow({ acc }: { acc: AccountCard }) {
+  const router = useRouter()
+  const toast = useToast()
+  const [isSaving, setIsSaving] = useState(false)
+  const Icon = TYPE_ICONS[acc.type] ?? Landmark
+  const needsReview = !acc.typeConfirmed
+
+  /** PATCH the account, mirroring AddManualAccountModal's mutation pattern. */
+  const patchAccount = async (body: Record<string, unknown>) => {
+    if (isDemoMode()) {
+      toast.show(DEMO_TOAST_COPY.generic)
+      return
+    }
+    setIsSaving(true)
+    try {
+      const res = await fetch(`/api/accounts/${acc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new AccountUpdateError(data.error ?? 'Unknown error')
+      }
+      router.refresh()
+    } catch (err) {
+      toast.show(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleTypeChange = (newType: string) => {
+    if (newType === acc.type) return
+    patchAccount({ type: newType })
+  }
+
+  const handleConfirm = () => patchAccount({ typeConfirmed: true })
+
+  return (
+    <div
+      className={`flex items-center gap-4 px-6 py-3 transition-colors duration-150 ${
+        needsReview ? 'bg-tertiary/[0.07] hover:bg-tertiary/10' : 'hover:bg-surface-highest'
+      }`}
+    >
+      <div className="w-8 h-8 rounded-lg bg-surface-low flex items-center justify-center flex-shrink-0">
+        <Icon size={16} className="text-on-surface-variant" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-inter text-sm text-on-surface font-medium truncate">{acc.name}</p>
+        {needsReview && (
+          <p className="font-inter font-medium text-xs tracking-wider uppercase text-tertiary">
+            Needs review
+          </p>
+        )}
+      </div>
+      <Select value={acc.type} onValueChange={handleTypeChange} disabled={isSaving}>
+        <SelectTrigger className="w-[148px] h-9" aria-label={`Account type for ${acc.name}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ACCOUNT_TYPES.map((t) => (
+            <SelectItem key={t} value={t}>{TYPE_LABELS[t]}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {needsReview && (
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={isSaving}
+          aria-label={`Confirm account type for ${acc.name}`}
+          className="font-inter font-medium text-xs tracking-wider px-3 py-1.5 rounded-md bg-primary/15 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+        >
+          Confirm
+        </button>
+      )}
+      <p className="font-manrope font-semibold text-sm text-on-surface">
+        <PrivacyAmount cents={acc.currentBalanceCents} />
+      </p>
+      <SyncBadge status={acc.syncStatus} />
+    </div>
+  )
+}
+
+/**
  * Tabbed account list view with ALL / CASH / DEBT filters.
- * Each account rendered as a single-column list row with icon, name, type, balance, status.
+ * Each account rendered as a single-column list row with icon, name,
+ * an inline type dropdown, balance, and sync status.
  */
 export function ConnectedInstitutions({
   accounts,
@@ -93,27 +204,9 @@ export function ConnectedInstitutions({
         </div>
       ) : (
         <div className="overflow-y-auto min-h-0 flex-1">
-          {filtered.map((acc) => {
-            const Icon = TYPE_ICONS[acc.type] ?? Landmark
-            return (
-              <div
-                key={acc.id}
-                className="flex items-center gap-4 px-6 py-3 hover:bg-surface-highest transition-colors duration-150"
-              >
-                <div className="w-8 h-8 rounded-lg bg-surface-low flex items-center justify-center flex-shrink-0">
-                  <Icon size={16} className="text-on-surface-variant" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-inter text-sm text-on-surface font-medium truncate">{acc.name}</p>
-                  <p className="font-inter text-xs text-on-surface-variant">{TYPE_LABELS[acc.type] ?? acc.type}</p>
-                </div>
-                <p className="font-manrope font-semibold text-sm text-on-surface">
-                  <PrivacyAmount cents={acc.currentBalanceCents} />
-                </p>
-                <SyncBadge status={acc.syncStatus} />
-              </div>
-            )
-          })}
+          {filtered.map((acc) => (
+            <AccountRow key={acc.id} acc={acc} />
+          ))}
         </div>
       )}
     </div>
