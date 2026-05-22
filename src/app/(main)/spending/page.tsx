@@ -23,6 +23,8 @@ async function fetchSpendingSlice(
   to: Date,
   range: RangeKey,
 ): Promise<SpendingRangeSlice> {
+  // `getPreviousPeriodRange` returns null for "max" — all available data has
+  // no prior period, so the period-over-period average collapses to 0.
   const previousRange = getPreviousPeriodRange(range)
   const [
     { totalCents, byCategory },
@@ -35,7 +37,9 @@ async function fetchSpendingSlice(
     getSpendingTransactions(from, to),
     getPreviousPeriodSpending(range),
     getMonthlyAverageSpending(from, to),
-    getMonthlyAverageSpending(previousRange.from, previousRange.to),
+    previousRange
+      ? getMonthlyAverageSpending(previousRange.from, previousRange.to)
+      : Promise.resolve(0),
   ])
   return {
     totalCents,

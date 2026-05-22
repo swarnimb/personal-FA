@@ -37,10 +37,14 @@ export function getDateRange(range: RangeKey): { from: Date; to: Date } {
 }
 
 /**
- * Returns the equivalent-length period immediately before the current range.
+ * Returns the equivalent-length period immediately before the current range,
+ * or `null` for `'max'`. "Max" spans all available data, so there is no prior
+ * period to compare against — callers must treat `null` as "no comparison".
  * Used for period-over-period % change calculations.
  */
-export function getPreviousPeriodRange(range: RangeKey): { from: Date; to: Date } {
+export function getPreviousPeriodRange(range: RangeKey): { from: Date; to: Date } | null {
+  if (range === 'max') return null
+
   const current = getDateRange(range)
   const lengthMs = current.to.getTime() - current.from.getTime()
 

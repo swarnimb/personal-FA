@@ -57,10 +57,13 @@ export async function getSpendingBreakdown(
 
 /**
  * Total spending in the period immediately before the selected range —
- * used for the period-over-period delta.
+ * used for the period-over-period delta. Returns 0 for the `max` range,
+ * which spans all data and has no prior period to compare.
  */
 export async function getPreviousPeriodSpending(range: RangeKey): Promise<number> {
-  const { from, to } = getPreviousPeriodRange(range)
+  const previous = getPreviousPeriodRange(range)
+  if (previous === null) return 0
+  const { from, to } = previous
   const exclList = Prisma.join(SPENDING_EXCLUDED_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<{ total: bigint }[]>(Prisma.sql`
     SELECT COALESCE(SUM(ABS("amountCents")), 0)::int AS total

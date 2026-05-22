@@ -80,7 +80,7 @@ describe('getPreviousPeriodRange', () => {
   })
 
   it('1m previous: Feb 11 to March 13', () => {
-    const { from, to } = getPreviousPeriodRange('1m')
+    const { from, to } = getPreviousPeriodRange('1m')!
     // Current: March 14 – April 13 (30 days)
     // Previous to = March 13, previous from = 30 days before March 13
     expect(to.getMonth()).toBe(2) // March
@@ -89,7 +89,7 @@ describe('getPreviousPeriodRange', () => {
   })
 
   it('ytd previous: prior year equivalent', () => {
-    const { from, to } = getPreviousPeriodRange('ytd')
+    const { from, to } = getPreviousPeriodRange('ytd')!
     // Current: Jan 1 – April 13 (103 days)
     // Previous to = Dec 31 2025, previous from = 103 days before Dec 31
     expect(to.getFullYear()).toBe(2025)
@@ -100,7 +100,7 @@ describe('getPreviousPeriodRange', () => {
 
   it('previous period length matches current period length', () => {
     const current = getDateRange('3m')
-    const previous = getPreviousPeriodRange('3m')
+    const previous = getPreviousPeriodRange('3m')!
     const currentLen = current.to.getTime() - current.from.getTime()
     const previousLen = previous.to.getTime() - previous.from.getTime()
     expect(previousLen).toBe(currentLen)
@@ -108,9 +108,13 @@ describe('getPreviousPeriodRange', () => {
 
   it('previous period ends 1 day before current period starts', () => {
     const current = getDateRange('1m')
-    const previous = getPreviousPeriodRange('1m')
+    const previous = getPreviousPeriodRange('1m')!
     const gap = current.from.getTime() - previous.to.getTime()
     const ONE_DAY_MS = 86_400_000
     expect(gap).toBe(ONE_DAY_MS)
+  })
+
+  it('max: returns null — all available data has no prior period', () => {
+    expect(getPreviousPeriodRange('max')).toBeNull()
   })
 })
