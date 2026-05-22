@@ -48,11 +48,12 @@ async function fetchNetWorthSlice(
     }
     effectiveFrom = earliest
   }
-  // "Max" spans all available data — there is no prior period to compare
-  // against, so skip the period-over-period lookup and show no delta.
+  // `getPreviousPeriodRange` returns null for "max" — all available data has
+  // no prior period to compare against, so the card renders no delta.
+  const previous = getPreviousPeriodRange(range)
   const [history, previousPeriodCents] = await Promise.all([
     getNetWorthHistorySeries(effectiveFrom, to, range),
-    isMax ? Promise.resolve(null) : getNetWorthAtDate(getPreviousPeriodRange(range).to),
+    previous ? getNetWorthAtDate(previous.to) : Promise.resolve(null),
   ])
   return { history, previousPeriodCents, isMax }
 }

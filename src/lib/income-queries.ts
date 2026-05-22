@@ -74,10 +74,13 @@ export async function getMonthlyIncome(
 
 /**
  * Total income in the period immediately before the selected range —
- * used for the period-over-period delta on the Income tab.
+ * used for the period-over-period delta on the Income tab. Returns 0 for the
+ * `max` range, which spans all data and has no prior period to compare.
  */
 export async function getPreviousPeriodIncome(range: RangeKey): Promise<number> {
-  const { from, to } = getPreviousPeriodRange(range)
+  const previous = getPreviousPeriodRange(range)
+  if (previous === null) return 0
+  const { from, to } = previous
   const incomeList = Prisma.join(INCOME_CATEGORIES.map((c) => Prisma.sql`${c}`))
   const rows = await db.$queryRaw<{ total: bigint }[]>(Prisma.sql`
     SELECT COALESCE(SUM("amountCents"), 0)::int AS total
