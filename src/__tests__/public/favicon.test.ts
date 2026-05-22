@@ -1,37 +1,23 @@
 /**
  * favicon.test.ts
  *
- * Asserts that `public/favicon.ico` exists, is non-empty, and is a valid
- * ICO file with at least one entry at 32×32 (Task 67 acceptance).
- *
- * The test is also the reproducible build hook for the binary asset — if
- * the file is missing (fresh checkout, regenerated dev environment), it
- * invokes `generateFavicon()` from the generator script to produce a
- * deterministic copy before asserting. The output is byte-for-byte stable
- * given identical Velvet Ledger palette inputs, so the committed file and
- * the regenerated file are interchangeable.
+ * Asserts that `src/app/favicon.ico` — the Next.js App Router favicon source
+ * of truth — exists, is non-empty, and is a valid ICO file with at least one
+ * 32×32 entry. Next.js serves this file automatically at `/favicon.ico`; no
+ * copy in `public/` is needed (and a duplicate there would conflict).
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { generateFavicon } from '../../../scripts/generate-favicon'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..')
-const FAVICON_PATH = resolve(PROJECT_ROOT, 'public', 'favicon.ico')
+const FAVICON_PATH = resolve(PROJECT_ROOT, 'src', 'app', 'favicon.ico')
 
 describe('favicon', () => {
-  beforeAll(() => {
-    // Reproducible: regenerate if missing (e.g. fresh clone, or to verify
-    // the committed bytes still match the generator output).
-    if (!existsSync(FAVICON_PATH)) {
-      generateFavicon(PROJECT_ROOT)
-    }
-  })
-
-  it('public/favicon.ico exists and is non-empty', () => {
+  it('src/app/favicon.ico exists and is non-empty', () => {
     expect(existsSync(FAVICON_PATH)).toBe(true)
     const stat = statSync(FAVICON_PATH)
     expect(stat.size).toBeGreaterThan(0)

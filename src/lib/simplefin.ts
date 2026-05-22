@@ -45,10 +45,53 @@ function buildAuth(accessUrl: string): {
   }
 }
 
+/** True when `value` parses as an http(s) URL. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Decodes a SimpleFin setup token into the "claim URL" to POST to.
+ *
+ * Per the SimpleFin protocol a setup token is a base64-encoded https URL.
+ * For resilience a token that is already a plain URL is also accepted.
+ *
+ * @see https://www.simplefin.org/protocol.html
+ */
+function decodeClaimUrl(setupToken: string): string {
+  const token = setupToken.trim()
+  if (!token) {
+    throw new Error('SimpleFin token exchange failed: setup token is empty')
+  }
+  if (isHttpUrl(token)) return token
+  const decoded = Buffer.from(token, 'base64').toString('utf-8').trim()
+  if (!isHttpUrl(decoded)) {
+    throw new Error(
+      'SimpleFin token exchange failed: the setup token is not valid. ' +
+        'Copy the full one-time token from SimpleFin Bridge and paste it exactly.',
+    )
+  }
+  return decoded
+}
+
+/**
+ * Exchanges a SimpleFin setup token for a long-lived access URL.
+ *
+ * The setup token is base64-decoded to a claim URL; POSTing to that URL
+ * returns the access URL, which embeds basic-auth credentials for all
+ * subsequent data fetches.
+ */
 export async function exchangeSetupToken(setupToken: string): Promise<string> {
+  const claimUrl = decodeClaimUrl(setupToken)
+
   let response: Response
   try {
-    response = await fetch(setupToken, { method: 'POST' })
+    response = await fetch(claimUrl, { method: 'POST' })
   } catch (cause) {
     throw new Error('SimpleFin token exchange failed: network error', { cause })
   }

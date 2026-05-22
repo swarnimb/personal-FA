@@ -21,9 +21,6 @@ node_modules/
 .next/
 out/
 next-env.d.ts
-# Build regenerates public/favicon.ico from src/app/favicon.ico (App Router source of truth) —
-# ignore the duplicate so it stops appearing as untracked after every build.
-public/favicon.ico
 
 # TypeScript
 *.tsbuildinfo
