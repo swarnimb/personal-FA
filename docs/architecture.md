@@ -374,3 +374,158 @@ The demo is a static HTML/JS artifact derived from seeded fictional data, hosted
 | `.github/workflows/deploy-demo.yml` | New. End-to-end build + deploy pipeline. |
 | `README.md` | Rewritten as showcase: hero shot, screenshots, live demo link, one-command local setup. |
 | `public/favicon.ico` | Replaced (fix). |
+
+---
+
+## AI-Assisted Categorization (V1.1 Phase 2)
+
+> Architectural note recording the binding decisions behind V1.1 Phase 2 — runtime AI categorization of uncategorized transactions. Companion to `docs/prd.md` § 15.
+> Added 2026-05-23.
+
+### Purpose
+
+After the SimpleFin sync runs the keyword categorization engine (§ 10 of `prd.md`), a meaningful tail of transactions remains uncategorized. V1.1 Phase 2 adds an opt-in LLM-suggested categorization flow with per-merchant rule persistence, surfaced through a new Review screen. Privacy is architecturally enforced: only normalized merchant strings ever leave the host (CONSTRAINT-16). Categorical responses are validated against an allowed-values list before being accepted (CONSTRAINT-17).
+
+### New data model
+
+Three new Prisma models:
+
+**`MerchantRule`** — persistence layer for per-merchant categorizations. The normalized form is the primary key (lookup is always by `normalizedMerchant`; surrogate UUID would force a redundant secondary index).
+
+```prisma
+model MerchantRule {
+  normalizedMerchant String              @id
+  displayMerchant    String
+  category           String
+  source             MerchantRuleSource
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+enum MerchantRuleSource { USER  AI }
+```
+
+**`LLMCost`** — monthly cost ledger (one row per `yearMonth` string like `"2026-05"`, natural primary key).
+
+```prisma
+model LLMCost {
+  yearMonth           String   @id
+  estimatedCentsSpent Int      @default(0)
+  updatedAt           DateTime @updatedAt
+}
+```
+
+**`AppSettings`** — singleton config table (one row, `id = "singleton"`). V1.1 Phase 2 fills the `ai*` columns; future settings categories add their own column groups (`sync*`, `display*`, etc.) so the table stays flat and type-safe.
+
+```prisma
+model AppSettings {
+  id                    String   @id @default("singleton")
+  // AI categorization (V1.1 Phase 2)
+  aiEnabled             Boolean  @default(false)
+  aiEncryptedApiKey     String?
+  aiIv                  String?
+  aiAuthTag             String?
+  aiMonthlyCapCents     Int      @default(500)   // $5.00
+  aiConsentAcknowledged Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+```
+
+Singleton-row pattern over key-value config table: V1.1 has a known small set of settings; explicit columns are type-safe in Prisma. Future setting groups add their own column prefixes — the table stays flat.
+
+API-key encryption reuses the existing 3-field pattern (`encrypted*` + `iv` + `authTag`) from `ExchangeConnection` and `SimplefinConnection`. Uses `encrypt()` / `decrypt()` from `src/lib/crypto.ts`. AES-256-GCM (CONSTRAINT-06).
+
+### LLM client module — `src/lib/anthropic.ts`
+
+Flat in `src/lib/` matches the precedent set by `coinbase.ts` and `kraken.ts` — V1.1 commits to a single provider (Anthropic, Claude Haiku 4.5 `claude-haiku-4-5-20251001`). If V1.2 adds providers, refactor to `src/lib/llm/{provider}.ts` behind a shared interface. Don't pre-generalize.
+
+Public surface:
+
+```typescript
+export async function categorizeMerchants(
+  normalizedMerchants: string[],
+  isSpending: boolean,
+): Promise<Array<{ category: string | null; rawResponse: string }>>;
+
+export async function estimateBatchCost(merchantCount: number): Promise<number>;  // cents
+
+export async function isAIAvailable(): Promise<{
+  enabled: boolean;
+  reason?: 'NO_KEY' | 'AT_CAP' | 'DISABLED';
+}>;
+```
+
+Key handling: decrypted per call (no in-memory cache — matches existing crypto-key handling pattern). Prompt template is the one validated by the A-11 spike (in-list rate 20/20). Out-of-list responses → `null` for that batch index (silent drop, LOUD log per error-handling rules); the merchant stays Uncategorized and manual fallback fills in on the Review screen.
+
+### Categorization lookup precedence
+
+Single function `categorizeTransaction(transaction, account): string`:
+
+1. **`MerchantRule` match** on `normalizedMerchant` → return its `category`
+2. **Keyword engine** (`src/lib/categorization-rules.ts`) → if match, return that category
+3. **Investment-account filter** — if Step 2 returned `'Uncategorized'` AND `account.type` ∈ {`Investment`, `Crypto`} → return `'Transfer Out'`
+4. **Otherwise** → `'Uncategorized'` → flows to Review queue
+
+Step 3 is the A-11 spike's side-finding fix. Brokerage reinvestments and crypto buys-within-account ARE internal money movement; `Transfer Out` is semantically correct and CONSTRAINT-15 already excludes Transfer Out from Spending. The filter fires only when Step 2 returned `Uncategorized` so dividend keyword matches (`DIVIDEND` → `Interest & Dividends`) still classify correctly.
+
+### Settings surface — `/settings` route
+
+- `src/app/(main)/settings/page.tsx` — server component; fetches `AppSettings` singleton + current-month `LLMCost`
+- `src/app/(main)/settings/AISettingsForm.tsx` — client component (toggle, masked API-key input, monthly cap input, current spend display, "Categorize existing transactions with AI" button)
+- `src/app/api/settings/ai/route.ts` — `GET` (returns enabled state + cap + spend; NEVER the key), `POST` (save key — encrypts before write), `DELETE` (clear key + disable)
+- `src/app/api/settings/ai/backfill/route.ts` — `POST` (fire-and-forget per existing sync pattern; writes to `SyncLog`; client polls status)
+
+API key is never returned to the client after save (SEC-01). UI shows "Key set (••••)" or "No key" — never the value.
+
+### Cost enforcement
+
+Pre-call check pattern, wrapped in `categorizeMerchants()`:
+
+1. SELECT current-month `LLMCost.estimatedCentsSpent`
+2. Compare to `AppSettings.aiMonthlyCapCents`
+3. If at/over cap → throw `BudgetExceededError` (LOUD; caller surfaces "AI suggestions paused — manual works as normal" banner per PRD § 15)
+4. If under → make the SDK call (outside any DB transaction — LLM latency must not hold a Postgres connection)
+5. After call → `upsert LLMCost { yearMonth, estimatedCentsSpent: { increment: <thisCallCents> } }`
+
+Race condition (two concurrent calls both passing pre-check and exceeding cap by one batch ~$0.001) is accepted as a soft-cap behavior for a single-user app.
+
+### Privacy enforcement test (CONSTRAINT-16)
+
+The pure function `buildCategorizationPrompt(merchants: string[], categories: string[]): string` is extracted from `anthropic.ts` and tested directly. Two integration tests:
+
+1. **Prompt-shape test:** asserts `buildCategorizationPrompt(...)` output contains each provided merchant AND fails on a denylist regex matching amount/date/account patterns: `/\$\d|amountCents|accountId|account_id|\d{4}-\d{2}-\d{2}|ISO\s*date/i`.
+2. **SDK-mocked end-to-end test:** mocks `@anthropic-ai/sdk`, calls `categorizeMerchants(...)` with realistic data, asserts the captured `messages[0].content` matches the same denylist + contains only allowed dynamic content (merchant strings + the categories list).
+
+These tests fail in CI if a future change tries to enrich the prompt with transaction context. CONSTRAINT-16 is architecturally enforced, not just documented.
+
+### Async / background pattern
+
+The Settings page backfill button and the Review screen "Apply All" follow the existing fire-and-forget orchestrator pattern from `runFullSync`:
+- API route creates a `SyncLog` row, returns `syncLogId`
+- Categorization run happens in `.catch()` continuation (no `await` in the route handler)
+- Client polls `GET /api/sync/status` for progress
+
+No new async infrastructure (no queue, no worker process). Cron-driven sync continues to live only in `src/instrumentation.ts` (CONSTRAINT-08).
+
+### Migration mechanics
+
+`prisma migrate dev` is non-interactive-blocked in this environment. Three new migrations, all hand-written SQL + `prisma migrate deploy`:
+
+1. `[ts]_add_merchant_rule` — `MerchantRule` table + `MerchantRuleSource` enum
+2. `[ts]_add_llm_cost` — `LLMCost` table
+3. `[ts]_add_app_settings` — `AppSettings` table (with `id = 'singleton'` default + seeded default row)
+
+No structural `Account` changes (investment-account filter is application code, not schema).
+
+### Boundary preservation
+
+- The privacy promise is testable: CONSTRAINT-16 + the integration tests above.
+- The cost ceiling is enforced before every call, not advisory.
+- Manual fallback is always functional: AI is opt-in (`aiEnabled = false` by default) and the Review screen works without an API key.
+- `IS_DEMO` (FB-14) gates the AI module out of demo builds — the demo never instantiates the Anthropic SDK, never reads `AppSettings.aiEncryptedApiKey`, never writes to `LLMCost`.
+
+### Architectural implications going forward (V1.2+ guidance)
+
+- **Multi-provider LLM (V1.2 candidate):** refactor `src/lib/anthropic.ts` → `src/lib/llm/anthropic.ts` + sibling provider modules behind a shared `LLMClient` interface. `AppSettings` adds an `aiProvider` enum column. Bounded refactor; no schema break.
+- **AI features beyond categorization (V2 candidate — explicitly out of scope for V1.1):** any new LLM use case (insights, summarization, etc.) cannot reuse `anthropic.ts` as-is per CONSTRAINT-16. Each new use case requires its own privacy disclosure, consent gate, and prompt module — by design.
+- **Normalization algorithm changes:** `MerchantRule.normalizedMerchant` PK changes require a re-key migration (compute new normalized form for all rules; merge duplicates with newest-wins). Documented as an architectural implication in `docs/assumptions.md` (A-13).

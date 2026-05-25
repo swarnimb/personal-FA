@@ -53,3 +53,6 @@ docs/security-report.md
 
 # Test output artifacts
 *.log
+
+# Throwaway spike scripts (per @assumptions framework — never commit)
+tmp/

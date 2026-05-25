@@ -1,7 +1,7 @@
 # Plan: AmIBroke Finance Tracker
 
-> Produced by `@plan`. Approved 2026-04-06. Tasks 24–25 added by `@create-plan` 2026-04-13. Tasks 26–38 added by `@create-plan` 2026-04-13 (V1.1 Stitch Design Alignment). Tasks 46–50 added 2026-04-29 (Calculation Audit fixes). Task 76 added 2026-05-20 (`@launch-prep` pre-launch cleanup).
-> 76 tasks. Single file.
+> Produced by `@plan`. Approved 2026-04-06. Tasks 24–25 added by `@create-plan` 2026-04-13. Tasks 26–38 added by `@create-plan` 2026-04-13 (V1.1 Stitch Design Alignment). Tasks 46–50 added 2026-04-29 (Calculation Audit fixes). Task 76 added 2026-05-20 (`@launch-prep` pre-launch cleanup). Task 77 added 2026-05-20 (post-V1.0 security cleanup). Task 78 added 2026-05-21 (Demo Data Overhaul + Spending exclusion fix). Tasks 79–94 added 2026-05-25 (`@create-plan` V1.1 Phase 2 — AI-Assisted Categorization).
+> 94 tasks. Single file.
 > Mark tasks `[x]` when complete. Mark superseded tasks `[~]`.
 > `@session-start` reads this to find the next `[ ]` task.
 
@@ -87,6 +87,24 @@
 | 74 | Range-chip prefetch — no network call on switch | [~] superseded — AC amended |
 | 75 | Re-run @qa after Tasks 72–74 land | [x] |
 | 76 | `@launch-prep` cleanup — demo-index, deployment plan, favicon, Recharts, seed-demo pre-commit, Next.js CVE upgrade, formal `@security` | [x] |
+| 77 | L1 IV_LENGTH → 12 + M2 PostCSS upstream-monitoring (post-V1.0 security cleanup) | [x] |
+| 78 | Demo Data Overhaul — Full Mid-Career Persona (balanced books) + Spending exclusion fix | [x] |
+| 79 | V1.1 Phase 2 — Schema migrations (MerchantRule + LLMCost + AppSettings) | [x] |
+| 80 | V1.1 Phase 2 — Merchant normalization library | [x] |
+| 81 | V1.1 Phase 2 — Categorization lookup precedence refactor | [ ] |
+| 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [ ] |
+| 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [ ] |
+| 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [ ] |
+| 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [ ] |
+| 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
+| 87 | V1.1 Phase 2 — Review queue API | [ ] |
+| 88 | V1.1 Phase 2 — Apply categorizations API | [ ] |
+| 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [ ] |
+| 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [ ] |
+| 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [ ] |
+| 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [ ] |
+| 93 | V1.1 Phase 2 — SECURITY.md AI Categorization section | [ ] |
+| 94 | V1.1 Phase 2 — E2E validation against real `amibroke` DB | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -97,6 +115,8 @@
 **Recommended build order (V1.3 — Calculation Audit):** 46 → 47+48 (parallel) → 49 → 50
 
 **Recommended build order (V1.4 — Demo Deployment):** 55 → 56+57+58+59 (parallel) → 60+61 → 62 → 63+64+65 (parallel) → 66+67 → 68 → 69+70 (parallel) → 71
+
+**Recommended build order (V1.5 — V1.1 Phase 2 AI Categorization):** 79 → 80+82+84+88+92 (parallel) → 81+83 → 85+87+93 (parallel) → 86+90 → 89 → 91 → 94
 
 ---
 
@@ -2764,3 +2784,607 @@ the core guarantee is unverified by automation.
 **Depends on:** Task 77 (Post-V1.0 Cleanup section established)
 **Specialist:** @dev
 **Completed:** 2026-05-21
+
+---
+
+# V1.1 Phase 2 — AI-Assisted Categorization (Tasks 79–94)
+
+> Added 2026-05-25 by `@create-plan`. Source: `docs/prd.md` § 15, `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2).
+> Decisions locked through `@cpo` (11 product decisions), `@assumptions` (15/15 closed; A-11 spike PASS 20/20), `@cto` (architecture + CONSTRAINT-16 + CONSTRAINT-17 + FB-19 through FB-22).
+
+---
+
+## Task 79: V1.1 Phase 2 — Schema migrations (MerchantRule + LLMCost + AppSettings)
+
+**Files:**
+- `prisma/schema.prisma` — modify (add `MerchantRule`, `MerchantRuleSource` enum, `LLMCost`, `AppSettings` models)
+- `prisma/migrations/[ts]_add_merchant_rule/migration.sql` — create (hand-written SQL)
+- `prisma/migrations/[ts]_add_llm_cost/migration.sql` — create
+- `prisma/migrations/[ts]_add_app_settings/migration.sql` — create (includes INSERT seeding the singleton row)
+
+**Functions to implement:** None (DDL only).
+
+**Schema additions (verbatim — match `docs/architecture.md` § AI-Assisted Categorization):**
+
+```prisma
+model MerchantRule {
+  normalizedMerchant String              @id
+  displayMerchant    String
+  category           String
+  source             MerchantRuleSource
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+enum MerchantRuleSource { USER  AI }
+
+model LLMCost {
+  yearMonth           String   @id
+  estimatedCentsSpent Int      @default(0)
+  updatedAt           DateTime @updatedAt
+}
+
+model AppSettings {
+  id                    String   @id @default("singleton")
+  aiEnabled             Boolean  @default(false)
+  aiEncryptedApiKey     String?
+  aiIv                  String?
+  aiAuthTag             String?
+  aiMonthlyCapCents     Int      @default(500)
+  aiConsentAcknowledged Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+```
+
+**Acceptance criteria:**
+- [x] All three models present in `schema.prisma` exactly as above
+- [x] Three migration SQL files hand-written (per Session 31 handoff — `prisma migrate dev` is non-interactive-blocked here)
+- [x] `_add_app_settings/migration.sql` includes `INSERT INTO "AppSettings" ("id") VALUES ('singleton') ON CONFLICT DO NOTHING;` seeding the default row
+- [x] `prisma migrate deploy` applies cleanly against `amibroke` and `amibroke_test`
+- [x] `prisma generate` succeeds (run with dev server stopped per Session 31 EPERM constraint)
+- [x] CONSTRAINT-01: cent-storage convention preserved (`aiMonthlyCapCents` and `estimatedCentsSpent` are `Int`)
+- [x] No structural change to `Account` or `Transaction` (investment-account filter is application code per T81, not schema)
+
+**Tests required:** None (DDL only — covered by downstream integration tests in T81, T82, T85, T87, T88).
+
+**Depends on:** None.
+**Specialist:** @dev
+**Completed:** 2026-05-25
+
+---
+
+## Task 80: V1.1 Phase 2 — Merchant normalization library
+
+**Files:**
+- `src/lib/merchant.ts` — create
+- `src/__tests__/lib/merchant.test.ts` — create
+
+**Functions to implement:**
+- `normalizeMerchant(raw: string): string` — lowercase → strip trailing whitespace+alphanumeric-≥4-char tokens → strip leading/trailing punctuation → collapse whitespace → trim
+- `displayMerchant(raw: string): string` — produces canonical UI label (title-cased, trimmed; preserves embedded punctuation for readability)
+
+**Acceptance criteria:**
+- [x] `normalizeMerchant('AMZN MKTP US*1A2B3C')` returns `'amzn mktp us'`
+- [x] `normalizeMerchant('  Hopdoddy Burger Bar  ')` returns `'hopdoddy burger bar'`
+- [x] `normalizeMerchant('CHASE CREDIT CRD AUTOPAY 260515 00000000039247')` strips the trailing long alphanumeric block
+- [x] `normalizeMerchant('')` returns `''`
+- [x] `displayMerchant('hopdoddyburgerbar')` returns a recognizable label (e.g., `'Hopdoddyburgerbar'` — best-effort, not perfect)
+- [x] Pure functions — no DB, no side effects, no I/O
+- [x] CQ-01: each function < 50 lines
+- [x] Public exports only; no default export
+
+**Tests required:**
+- `normalizeMerchant` → strips trailing transaction codes (parametrized over 6+ real spike samples)
+- `normalizeMerchant` → preserves embedded punctuation (e.g., `'lyft *ride sun'` stays intact)
+- `normalizeMerchant` → empty/whitespace input returns empty
+- `normalizeMerchant` → idempotent (`normalize(normalize(x)) === normalize(x)`)
+- `displayMerchant` → returns non-empty for non-empty input
+- `displayMerchant` → trims and title-cases reasonably
+
+**Depends on:** None.
+**Specialist:** @dev
+**Completed:** 2026-05-25
+
+---
+
+## Task 81: V1.1 Phase 2 — Categorization lookup precedence refactor
+
+**Files:**
+- `src/lib/categorize.ts` — modify (extract existing logic into 4-step precedence; integrate `MerchantRule` lookup + investment-account filter)
+- `src/lib/sync-simplefin.ts` — modify (call updated `categorizeTransaction` with account context, not just description)
+- `src/__tests__/unit/categorize.test.ts` — modify/create
+- `src/__tests__/integration/sync-categorization.integration.test.ts` — create
+
+**Functions to implement:**
+- `async function categorizeTransaction(input: { merchant: string }, account: { type: AccountType }): Promise<string>` — applies 4-step precedence: (1) MerchantRule on normalizedMerchant → (2) keyword engine → (3) if Step 2 returned 'Uncategorized' AND `account.type ∈ {Investment, Crypto}` → return 'Transfer Out' → (4) otherwise 'Uncategorized'
+- (Existing keyword-engine function stays in place; this wraps it.)
+
+**Acceptance criteria:**
+- [ ] 4-step precedence matches `docs/architecture.md` § Categorization lookup precedence exactly
+- [ ] Step 3 fires ONLY when Step 2 returned `'Uncategorized'` — a dividend keyword match on an investment account still routes to `Interest & Dividends`
+- [ ] User-confirmed categorizations (`categoryOverridden = true`) are NEVER re-categorized (preserves V1.0 contract + Session 31 next-session-constraint)
+- [ ] Sync flow (`sync-simplefin.ts`) passes the `account.type` into `categorizeTransaction` — no longer categorizes from merchant string alone
+- [ ] CONSTRAINT-15 echo: auto-Transfer-Out transactions on investment accounts inherit the Transfer Out exclusion from Spending (no new code needed — CONSTRAINT-15 already enforces this in `SPENDING_EXCLUDED_CATEGORIES`)
+- [ ] EH-01: any unexpected `MerchantRule` lookup error throws LOUD with context
+- [ ] CQ-01: function < 50 lines (extract helpers if needed)
+
+**Tests required:**
+- `categorizeTransaction` → MerchantRule wins over keyword (mock rule for 'amazon' → Shopping; raw `'AMAZON.COM'` → returns Shopping even though keyword would say Shopping anyway; test with a non-default rule like 'amazon' → Subscriptions to verify rule wins)
+- `categorizeTransaction` → keyword wins over investment-filter (account.type = Investment + merchant 'DIVIDEND PAYMENT' → returns Interest & Dividends, not Transfer Out)
+- `categorizeTransaction` → investment-filter fires when keyword returns Uncategorized on Investment account → returns Transfer Out
+- `categorizeTransaction` → bank account + unknown merchant → returns Uncategorized (not Transfer Out)
+- `categorizeTransaction` → user-overridden transaction not re-categorized (the sync caller respects `categoryOverridden`)
+- Integration: sync upserts a new transaction on a Fidelity Investment account with a reinvestment description → final `category = 'Transfer Out'`
+- Integration: sync upserts a new transaction on a Chase Checking account with 'WHOLE FOODS' description → final `category = 'Groceries'` (keyword match)
+
+**Depends on:** T79, T80
+**Specialist:** @data-sync
+
+---
+
+## Task 82: V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation
+
+**Files:**
+- `package.json` — modify (add `@anthropic-ai/sdk` dependency, pinned caret-style per FB-06 precedent)
+- `src/lib/anthropic.ts` — create (foundation only — full categorize logic in T83)
+- `src/__tests__/integration/anthropic-foundation.integration.test.ts` — create
+
+**Functions to implement:**
+- `async function isAIAvailable(): Promise<{ enabled: boolean; reason?: 'NO_KEY' | 'AT_CAP' | 'DISABLED' }>` — fetches AppSettings + current LLMCost; returns enabled state with reason on failure
+- `async function estimateBatchCost(merchantCount: number): Promise<number>` — returns estimated cents for a batch of given size (formula tuned to A-11 spike measurement)
+- `async function getDecryptedKey(): Promise<string | null>` — fetches AppSettings singleton; if `aiEncryptedApiKey` null returns null; else `decrypt(aiEncryptedApiKey, aiIv, aiAuthTag)` from `src/lib/crypto.ts`
+- `async function getCurrentMonthSpend(): Promise<number>` — fetches LLMCost for current `yearMonth` (e.g., `"2026-05"`); returns 0 if no row
+
+**Acceptance criteria:**
+- [ ] `@anthropic-ai/sdk` installed at latest stable, pinned `^x.y.z` style (matches FB-06 Prisma pinning convention)
+- [ ] `isAIAvailable()` returns `{ enabled: false, reason: 'DISABLED' }` when `aiEnabled = false`
+- [ ] `isAIAvailable()` returns `{ enabled: false, reason: 'NO_KEY' }` when `aiEnabled = true` but no encrypted key
+- [ ] `isAIAvailable()` returns `{ enabled: false, reason: 'AT_CAP' }` when current-month spend ≥ `aiMonthlyCapCents`
+- [ ] `isAIAvailable()` returns `{ enabled: true }` (no reason) when key present + under cap + enabled
+- [ ] `estimateBatchCost(20)` returns approximately the A-11 spike value (target: ≤ 100 cents = $0.01; spike measured ~$0.0008; allow generous headroom)
+- [ ] `getDecryptedKey()` uses `decrypt()` from `src/lib/crypto.ts`; throws LOUD on decryption failure with context (which fields were null vs corrupt)
+- [ ] SEC-01: decrypted key value NEVER logged, NEVER included in any error message, NEVER returned in stringified form to any caller other than `categorizeMerchants` (which uses it immediately and lets it go out of scope)
+- [ ] CQ-01: each function < 50 lines
+
+**Tests required:**
+- `isAIAvailable` → returns DISABLED reason when aiEnabled false (mocked DB)
+- `isAIAvailable` → returns NO_KEY reason when key columns null
+- `isAIAvailable` → returns AT_CAP reason when LLMCost row exceeds cap
+- `isAIAvailable` → returns `{ enabled: true }` for the happy path
+- `estimateBatchCost` → 20 merchants returns < 100 cents (spike-tuned threshold)
+- `getDecryptedKey` → round-trips an encrypted/decrypted value (uses real `encrypt()` to set up, asserts decrypted matches)
+- `getDecryptedKey` → throws LOUD on missing iv/authTag
+- `getCurrentMonthSpend` → returns 0 when no LLMCost row for current month
+- `getCurrentMonthSpend` → returns value when row exists
+
+**Depends on:** T79
+**Specialist:** @security
+
+---
+
+## Task 83: V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement
+
+**Files:**
+- `src/lib/anthropic.ts` — modify (add `categorizeMerchants`, `buildCategorizationPrompt`, `parseLLMResponse`, `incrementMonthCost`, typed errors)
+- `src/__tests__/integration/anthropic-categorize.integration.test.ts` — create
+- `src/__tests__/integration/anthropic-privacy.integration.test.ts` — create (CONSTRAINT-16 enforcement — see acceptance criteria)
+
+**Functions to implement:**
+- `function buildCategorizationPrompt(merchants: string[], categories: string[]): string` — pure function; the testable seam for CONSTRAINT-16
+- `function parseLLMResponse(text: string, expectedCount: number, allowedCategories: string[]): Array<string | null>` — strips markdown code-fence wrap if present, parses JSON array, validates each value against `allowedCategories`, returns `null` for out-of-list values (CONSTRAINT-17)
+- `async function incrementMonthCost(cents: number): Promise<void>` — upserts LLMCost row for current `yearMonth`, increments `estimatedCentsSpent`
+- `async function categorizeMerchants(normalizedMerchants: string[], isSpending: boolean): Promise<Array<{ category: string | null; rawResponse: string }>>` — orchestrates: pre-check (`isAIAvailable`), pre-cap-check (vs `estimateBatchCost`), pick `SPENDING_CATEGORIES` or `INCOME_CATEGORIES`, build prompt, SDK call, parse + validate, increment cost
+- Typed error classes: `AIUnavailableError`, `BudgetExceededError`, `AIParseError`, `AIRateLimitError` (all extend Error; constructor takes context)
+
+**Acceptance criteria:**
+- [ ] `categorizeMerchants` throws `AIUnavailableError` (LOUD) when `isAIAvailable()` returns enabled false
+- [ ] `categorizeMerchants` throws `BudgetExceededError` when `currentMonthSpend + estimatedBatchCost > aiMonthlyCapCents`
+- [ ] Input > 20 merchants: split into chunks of 20, separate SDK call per chunk, results concatenated (cap-checked between chunks)
+- [ ] Income/spending pre-classified: when `isSpending = true`, prompt uses `SPENDING_CATEGORIES` from `src/lib/categories.ts`; else `INCOME_CATEGORIES`
+- [ ] **CONSTRAINT-16 (privacy):** `buildCategorizationPrompt` output contains each provided `merchants[i]` AND the provided `categories.join(', ')` AND nothing else dynamic. Asserted by integration test denylist regex: `/\$\d|amountCents|accountId|account_id|\d{4}-\d{2}-\d{2}|ISO\s*date/i`. Same denylist asserted against captured SDK request body in SDK-mocked test.
+- [ ] **CONSTRAINT-17 (response validation):** `parseLLMResponse` returns `null` for any value not in `allowedCategories` (no fuzzy matching, no normalization — strict equality). Validation failure logged LOUD with the rejected value, the merchant index, and the raw response.
+- [ ] LLM API 429 surfaces as `AIRateLimitError` (typed) — propagated to caller
+- [ ] LLM API 5xx/network surfaces as `AIUnavailableError` (typed) — propagated to caller
+- [ ] JSON parse failure surfaces as `AIParseError` (typed, with raw text in context) — propagated to caller
+- [ ] `incrementMonthCost` upsert happens AFTER successful SDK call, OUTSIDE any DB transaction (LLM latency must not hold a Postgres connection per architecture.md)
+- [ ] Race-condition acknowledgment: two concurrent calls may both pass pre-check; soft cap accepted (single-user app; max ~$0.001 overshoot)
+- [ ] Decrypted key used immediately in SDK constructor scope; not stored anywhere (SEC-01)
+- [ ] SEC-01: API key never logged, never in error context
+- [ ] CQ-01: each function < 50 lines
+
+**Tests required:**
+- `buildCategorizationPrompt` → contains each merchant string verbatim
+- `buildCategorizationPrompt` → contains the categories list
+- `buildCategorizationPrompt` → denylist regex match returns false (CONSTRAINT-16) — parametrized over realistic merchant arrays
+- `parseLLMResponse` → valid in-list JSON array parses through cleanly
+- `parseLLMResponse` → out-of-list values become `null` at correct indices (CONSTRAINT-17)
+- `parseLLMResponse` → markdown ```json ... ``` wrap stripped
+- `parseLLMResponse` → malformed JSON throws `AIParseError`
+- `parseLLMResponse` → response with wrong array length throws `AIParseError`
+- `categorizeMerchants` → SDK-mocked end-to-end: captured `messages[0].content` satisfies denylist regex (CONSTRAINT-16)
+- `categorizeMerchants` → mocked DB: AIUnavailableError when isAIAvailable returns disabled
+- `categorizeMerchants` → mocked DB+SDK: BudgetExceededError when cost would exceed cap
+- `categorizeMerchants` → increments LLMCost after successful call
+- `categorizeMerchants` → 50 merchants → 3 SDK calls (20+20+10) → concatenated results
+- `categorizeMerchants` → 429 from SDK → AIRateLimitError
+- `categorizeMerchants` → 5xx from SDK → AIUnavailableError
+
+**Depends on:** T79, T82
+**Specialist:** @security
+
+---
+
+## Task 84: V1.1 Phase 2 — Sidebar nav (Settings + Review items)
+
+**Files:**
+- `src/components/layout/Sidebar.tsx` — modify (add Settings + Review nav items per PRD §1)
+- `src/__tests__/unit/Sidebar.test.tsx` — modify (or create if not yet present)
+
+**Functions to implement:** None (declarative React updates).
+
+**Acceptance criteria:**
+- [ ] Sidebar nav items in order: Dashboard, Income, Spending, Investments, Net Worth, Accounts, Settings, Review (matches PRD §1 update)
+- [ ] Settings item links to `/settings`
+- [ ] Review item links to `/review` and has a badge slot (count rendering wired in T90)
+- [ ] All existing nav items unchanged (no regression on Dashboard/Income/Spending/Investments/Net Worth/Accounts links)
+- [ ] CQ-02: component < 200 lines (Sidebar is small already)
+- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill for design conformance
+
+**Tests required:**
+- `Sidebar` → renders Settings link to `/settings`
+- `Sidebar` → renders Review link to `/review`
+- `Sidebar` → all 8 nav items present in correct order
+- `Sidebar` → existing nav links unchanged (regression check)
+
+**Depends on:** None.
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 85: V1.1 Phase 2 — Settings page + AISettingsForm + ConsentModal + AI settings APIs
+
+**Files:**
+- `src/app/(main)/settings/page.tsx` — create (server component)
+- `src/app/(main)/settings/AISettingsForm.tsx` — create (client component)
+- `src/app/(main)/settings/ConsentModal.tsx` — create (client component, first-time consent gate)
+- `src/app/api/settings/ai/route.ts` — create (GET / POST / DELETE handlers)
+- `src/__tests__/integration/settings-ai-api.integration.test.ts` — create
+
+**Functions to implement:**
+- `GET /api/settings/ai` → returns `{ enabled: boolean, monthlyCapCents: number, monthSpendCents: number, hasKey: boolean, consentAcknowledged: boolean }` — NEVER the key value, encrypted or otherwise
+- `POST /api/settings/ai` → body `{ apiKey?: string, enabled?: boolean, monthlyCapCents?: number, consentAcknowledged?: boolean }`. Encrypts `apiKey` via `encrypt()` before write. Validates `monthlyCapCents ∈ [100, 100000]`. Updates the singleton row. Returns updated GET shape.
+- `DELETE /api/settings/ai` → clears `aiEncryptedApiKey` / `aiIv` / `aiAuthTag` and sets `aiEnabled = false`. Returns updated GET shape. Idempotent.
+
+**Acceptance criteria:**
+- [ ] Settings page renders server-side fetching AppSettings + current LLMCost
+- [ ] AISettingsForm displays: enabled toggle (disabled-look + tooltip when no key set), masked API-key input ("Key set (••••)" if hasKey else placeholder), monthly cap input (in dollars, converts to cents on save), current-month spend display ("$X.XX of $Y.YY"), "Categorize existing transactions with AI" button (wired in T86)
+- [ ] Toggle to enabled when consentAcknowledged = false → ConsentModal opens; modal requires explicit "I understand merchant strings will be sent to Anthropic" checkbox before Enable button activates; on Enable, POST sets both `enabled = true` AND `consentAcknowledged = true`
+- [ ] CONSTRAINT-06 + SEC-06: API key encrypted via `encrypt()` from `src/lib/crypto.ts` (AES-256-GCM) before write to `aiEncryptedApiKey`
+- [ ] SEC-01: API key never returned in any GET response; never logged anywhere; never appears in any error message (including parse/validation errors)
+- [ ] DELETE clears key columns + disables AI; idempotent (deleting again is a no-op success)
+- [ ] Monthly cap input validation: integer, 100 ≤ value ≤ 100000 ($1 to $1000); rejects with structured error otherwise
+- [ ] First-time consent: AISettingsForm checks `consentAcknowledged` from GET; if false and user attempts to enable, ConsentModal mounts before the POST fires
+- [ ] EH-01: validation failures throw with structured context (which field, why invalid)
+- [ ] CQ-02: page < 200 lines, AISettingsForm < 200 lines, ConsentModal < 200 lines
+- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
+
+**Tests required:**
+- `GET /api/settings/ai` → response shape includes hasKey but never apiKey/encrypted fields
+- `POST /api/settings/ai` body `{ apiKey: 'sk-ant-test' }` → encrypted key stored in DB; subsequent GET shows `hasKey: true`
+- `POST /api/settings/ai` body `{ enabled: true }` when consentAcknowledged false → returns structured error requiring consent first
+- `POST /api/settings/ai` body `{ enabled: true, consentAcknowledged: true }` when key already set → enables AI cleanly
+- `POST /api/settings/ai` body `{ monthlyCapCents: 50 }` → validation error (below $1 minimum)
+- `POST /api/settings/ai` body `{ monthlyCapCents: 200000 }` → validation error (above $1000 maximum)
+- `DELETE /api/settings/ai` → clears key columns and disables; subsequent GET shows `hasKey: false, enabled: false`
+- `DELETE /api/settings/ai` → idempotent (call twice; second is a no-op success)
+- Component: `AISettingsForm` mounts and renders current state from GET
+- Component: ConsentModal blocks Enable button until checkbox checked
+
+**Depends on:** T79, T82, T84
+**Specialist:** @security (primary — credential handling) + @ui-amibroke (UI components)
+
+---
+
+## Task 86: V1.1 Phase 2 — Backfill API + orchestrator (fire-and-forget, chunked, cap-aware)
+
+**Files:**
+- `src/app/api/settings/ai/backfill/route.ts` — create
+- `src/lib/backfill-categorization.ts` — create (orchestrator)
+- `src/__tests__/integration/backfill-api.integration.test.ts` — create
+
+**Functions to implement:**
+- `POST /api/settings/ai/backfill` → body `{ confirmed: true }`. Returns `{ syncLogId: string, estimatedMerchantCount: number, estimatedCostCents: number }` immediately (fire-and-forget pattern from `src/lib/sync.ts`). Spawns the run via `.catch()` continuation.
+- `async function runBackfillCategorization(syncLogId: string): Promise<void>` — queries distinct uncategorized normalizedMerchants (using `getUncategorizedMerchants` from T87 review-queries), chunks into 20-per-batch, calls `categorizeMerchants` per chunk, applies via `applyCategorizations` from T88 review-apply, writes progress + final status to SyncLog
+
+**Acceptance criteria:**
+- [ ] POST creates a SyncLog row (type: `'backfill_categorization'`), returns syncLogId immediately without awaiting the run (matches existing `runFullSync` fire-and-forget pattern from `src/lib/sync.ts`)
+- [ ] Pre-flight estimate: count distinct uncategorized merchants × `estimateBatchCost(chunkCount)` returned in response so the UI can show "~$0.00X" before confirming
+- [ ] POST requires `body.confirmed = true` (defensive — UI should never POST without the user clicking confirm in T85's button + modal)
+- [ ] Orchestrator processes in chunks of 20; cost check between chunks via `isAIAvailable()`
+- [ ] If `BudgetExceededError` thrown mid-run: stop further chunks; SyncLog.errors records `{ stopped: 'AT_CAP', chunksCompleted: N }`; partial results that already landed remain
+- [ ] Per-chunk write atomicity: `applyCategorizations` runs inside `prisma.$transaction` (T88 enforces this) — if a chunk fails, that chunk's rules + transaction updates roll back together
+- [ ] All errors per chunk logged to SyncLog.errors (JSON), don't abort the whole run unless cost cap hit
+- [ ] EH-01: all errors thrown LOUD with what + where + why (chunk index, merchant count, error class)
+- [ ] CONSTRAINT-09 echo: never blind INSERT — `applyCategorizations` upserts MerchantRule on PK
+- [ ] CQ-01: orchestrator function < 50 lines (split chunk-processing into a helper)
+
+**Tests required:**
+- `POST /api/settings/ai/backfill` → without `confirmed: true` → 400 error
+- `POST /api/settings/ai/backfill` with `confirmed: true` → returns syncLogId without waiting (assert response time < 100ms for setup; mock the orchestrator to no-op)
+- `runBackfillCategorization` → 50 distinct uncategorized merchants in mocked DB → 3 chunks (20+20+10) → all rules upserted via mocked applyCategorizations → SyncLog final status = `'success'`
+- `runBackfillCategorization` → BudgetExceededError mid-run (mock anthropic to throw on chunk 2) → SyncLog records `stopped: 'AT_CAP'`; chunk 1's results landed
+- `runBackfillCategorization` → atomicity: simulate a chunk write failure → that chunk's MerchantRule upserts AND transaction updates roll back together; SyncLog.errors records the failure
+- `runBackfillCategorization` → zero uncategorized merchants → SyncLog records `success` with `merchantsProcessed: 0` (no SDK call made)
+
+**Depends on:** T83, T85, T87, T88
+**Specialist:** @data-sync
+
+---
+
+## Task 87: V1.1 Phase 2 — Review queue API (`GET /api/review/uncategorized`)
+
+**Files:**
+- `src/app/api/review/uncategorized/route.ts` — create
+- `src/lib/review-queries.ts` — create (CONSTRAINT-13: shared, importable, testable)
+- `src/__tests__/integration/review-api.integration.test.ts` — create
+
+**Functions to implement:**
+- `async function getUncategorizedMerchants(): Promise<Array<{ normalizedMerchant: string; displayMerchant: string; sampleDescription: string; transactionCount: number; isSpending: boolean }>>` — pure query, returns groupings sorted by `transactionCount` desc
+- `async function getReviewBadgeCount(): Promise<{ transactionCount: number; merchantCount: number }>` — for Sidebar badge + Dashboard banner (T90)
+- `GET /api/review/uncategorized` → returns the `getUncategorizedMerchants()` result
+
+**Acceptance criteria:**
+- [ ] Queries only transactions where `category = 'Uncategorized'` AND `categoryOverridden = false`
+- [ ] Grouping key is `normalizeMerchant(transaction.merchant)` (from T80) — done in application code (SQL would require porting the regex)
+- [ ] EXCLUDES transactions on accounts where `account.type ∈ {Investment, Crypto}` — those auto-categorize to Transfer Out at sync time per T81, so they should never reach Review. (Defense-in-depth: if T81 missed any historical row, this query still filters them out.)
+- [ ] Each result row: `displayMerchant` (most-recent transaction's `displayMerchant(merchant)`), `transactionCount`, `sampleDescription` (one raw `merchant` string for user context)
+- [ ] Sorted by `transactionCount` desc (largest groupings first — user clears the most-impactful merchants in fewest decisions)
+- [ ] `isSpending` derived: `true` if the majority (or all) sample transactions have `amountCents < 0`; else `false`. Used downstream by T83 to pick SPENDING vs INCOME categories.
+- [ ] CONSTRAINT-13: `getUncategorizedMerchants` and `getReviewBadgeCount` live in `src/lib/review-queries.ts`, importable from tests and from T89/T90 server components
+- [ ] EH-01: query failures thrown LOUD with context
+- [ ] CQ-01: each function < 50 lines
+
+**Tests required:**
+- `getUncategorizedMerchants` → groups duplicates by normalized form (mock DB with 3 transactions on 2 distinct normalized merchants → returns 2 rows)
+- `getUncategorizedMerchants` → excludes Investment-account transactions (mock DB with mixed accounts → returns only non-Investment results)
+- `getUncategorizedMerchants` → excludes Crypto-account transactions
+- `getUncategorizedMerchants` → excludes user-overridden transactions (`categoryOverridden = true`)
+- `getUncategorizedMerchants` → sorted by count desc
+- `getUncategorizedMerchants` → `isSpending` set per dominant transaction sign
+- `getReviewBadgeCount` → returns `{ transactionCount: 0, merchantCount: 0 }` when nothing uncategorized
+- `getReviewBadgeCount` → matches the row count + summed transactionCount of `getUncategorizedMerchants`
+- `GET /api/review/uncategorized` → end-to-end response shape
+
+**Depends on:** T79, T80, T81
+**Specialist:** @dev
+
+---
+
+## Task 88: V1.1 Phase 2 — Apply categorizations API (`POST /api/review/apply`)
+
+**Files:**
+- `src/app/api/review/apply/route.ts` — create
+- `src/lib/review-apply.ts` — create
+- `src/__tests__/integration/review-apply.integration.test.ts` — create
+
+**Functions to implement:**
+- `async function applyCategorizations(assignments: Array<{ normalizedMerchant: string; displayMerchant: string; category: string; source: 'USER' | 'AI' }>): Promise<{ rulesUpserted: number; transactionsUpdated: number }>` — atomic across all assignments
+- `POST /api/review/apply` → body `{ assignments: [...] }` → returns the function result
+
+**Acceptance criteria:**
+- [ ] Validates each `assignment.category ∈ ALL_CATEGORIES` (CONSTRAINT-17 echo at API boundary — defensive even though T83 enforces it upstream)
+- [ ] For each assignment: upsert `MerchantRule` on `normalizedMerchant` PK (create if new; update if exists) + UPDATE `Transaction` SET `category = assignment.category` WHERE `normalizeMerchant(merchant) = assignment.normalizedMerchant` AND `categoryOverridden = false`
+- [ ] Whole request wrapped in a single `prisma.$transaction` — atomic across all assignments; partial failure rolls back everything in the batch
+- [ ] `categoryOverridden` stays `false` on auto-applied transactions (user can still override per-transaction in Spending tab via T92)
+- [ ] When updating an existing rule: also UPDATE all matching transactions (retroactive — this is how T92's "Update rule and apply to all" path works)
+- [ ] EH-01: validation failures throw with structured context (which assignment, which field)
+- [ ] CONSTRAINT-13: `applyCategorizations` lives in `src/lib/review-apply.ts`, importable
+- [ ] CONSTRAINT-09 echo: upsert is the equivalent of "never blind INSERT" — MerchantRule PK guarantees no dupes
+- [ ] CQ-01: function < 50 lines (split per-assignment processing into a helper if needed)
+
+**Tests required:**
+- `applyCategorizations` → single new assignment: rule created, matching transactions updated
+- `applyCategorizations` → multiple assignments: all rules upserted, all transactions updated, one transaction
+- `applyCategorizations` → existing rule with new category: rule updated, matching transactions retroactively re-categorized
+- `applyCategorizations` → user-overridden transaction (`categoryOverridden = true`) NOT updated even if a rule applies to its merchant
+- `applyCategorizations` → invalid category (`'NotAValidCategory'`) throws with structured error
+- `applyCategorizations` → atomicity: simulate failure on second of three assignments → none of the three persist
+- `POST /api/review/apply` → end-to-end request/response
+
+**Depends on:** T79
+**Specialist:** @data-sync
+
+---
+
+## Task 89: V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all + privacy banner)
+
+**Files:**
+- `src/app/(main)/review/page.tsx` — create (server component)
+- `src/app/(main)/review/ReviewTable.tsx` — create (client component)
+- `src/app/(main)/review/PrefillButton.tsx` — create (client component)
+- `src/app/(main)/review/CategoryDropdown.tsx` — create (client component, reusable)
+- `src/app/(main)/review/PrivacyBanner.tsx` — create (client component)
+- `src/app/api/review/prefill/route.ts` — create
+- `src/__tests__/unit/ReviewTable.test.tsx` — create
+
+**Functions to implement:**
+- `POST /api/review/prefill` → body `{ normalizedMerchants: string[] }` → returns `Array<{ normalizedMerchant: string; suggestedCategory: string | null }>`. Calls `categorizeMerchants` (T83); maps result back. Handles AI-error classes by returning structured error response.
+
+**Acceptance criteria:**
+- [ ] Page renders uncategorized merchants from `GET /api/review/uncategorized` (T87)
+- [ ] Each row: `displayMerchant`, transaction count, sample raw description, `CategoryDropdown` (empty initially)
+- [ ] Sorted by transactionCount desc (matches API order)
+- [ ] `PrefillButton` shows ONLY when `isAIAvailable()` returns enabled; copy: "Pre-fill K merchants with AI (~$0.00X)" with K = current row count, $ from `estimateBatchCost`
+- [ ] Click `PrefillButton` → POST `/api/review/prefill` with all current normalized merchants → response fills each row's dropdown with the suggested category → "AI" badge appears on those rows
+- [ ] User changes a dropdown value → row's "AI" badge becomes "Edited" badge (visual indicator that it diverges from AI suggestion)
+- [ ] "Apply all" button writes via POST `/api/review/apply` (T88) with each row's source = `'AI'` (unchanged from suggestion) or `'USER'` (edited or hand-filled)
+- [ ] After successful Apply all: rows disappear from the table (re-fetch from API), success toast
+- [ ] If AI off (no key, at cap, disabled): PrefillButton hidden; ReviewTable still fully functional for manual categorization
+- [ ] `PrivacyBanner` persistent footer when AI is on: "AI suggestions are sent to Anthropic — merchant strings only"
+- [ ] CONSTRAINT-17 enforcement at UI: dropdown options sourced from `ALL_CATEGORIES` in `src/lib/categories.ts` — user can't pick a category not in the canonical list
+- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
+- [ ] CQ-02: each component < 200 lines
+
+**Tests required:**
+- `ReviewTable` → renders rows from mock API response
+- `ReviewTable` → AI badge appears after PrefillButton click (mocked prefill response)
+- `ReviewTable` → Edited badge replaces AI badge on user dropdown change
+- `ReviewTable` → Apply all calls `/api/review/apply` with correct source per row (AI for unchanged, USER for edited)
+- `ReviewTable` → empty rows when zero uncategorized
+- `PrefillButton` → hidden when `isAIAvailable` returns disabled (mock the GET API)
+- `PrefillButton` → cost preview matches `estimateBatchCost` formula
+- `PrivacyBanner` → mounted when AI enabled; absent when disabled
+- Integration: full Pre-fill → Apply all roundtrip against mocked anthropic SDK
+
+**Depends on:** T83, T84, T85, T87, T88
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 90: V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge
+
+**Files:**
+- `src/components/layout/CategorizationReviewBanner.tsx` — create (mirrors `AccountReviewBanner.tsx` pattern from Phase 1)
+- `src/app/(main)/page.tsx` — modify (mount the banner above existing dashboard content)
+- `src/components/layout/Sidebar.tsx` — modify (wire badge count from `getReviewBadgeCount`)
+
+**Functions to implement:** None (uses `getReviewBadgeCount` from T87).
+
+**Acceptance criteria:**
+- [ ] CategorizationReviewBanner mounts on Dashboard ONLY when `merchantCount > 0`
+- [ ] Banner text: "N transactions / K merchants need categorization review →"
+- [ ] Banner click → navigates to `/review`
+- [ ] Banner visual treatment mirrors `AccountReviewBanner` (consistency with Phase 1)
+- [ ] Sidebar Review item shows badge with `merchantCount` (hidden when 0)
+- [ ] Both surfaces use `getReviewBadgeCount` from `src/lib/review-queries.ts` (T87) — single source of truth, no duplicated counting logic
+- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
+- [ ] CQ-02: banner component < 200 lines
+
+**Tests required:**
+- `CategorizationReviewBanner` → renders when `merchantCount > 0`
+- `CategorizationReviewBanner` → hidden when `merchantCount = 0`
+- `CategorizationReviewBanner` → click navigates to /review
+- Sidebar Review badge → shows count when > 0
+- Sidebar Review badge → hidden when 0
+
+**Depends on:** T84, T87
+**Specialist:** @ui-amibroke
+
+---
+
+## Task 91: V1.1 Phase 2 — LLM error handling + edge-case banners
+
+**Files:**
+- `src/app/(main)/review/AIStatusBanner.tsx` — create (transient banner for runtime AI errors on the Review screen)
+- `src/lib/anthropic.ts` — modify (refine typed error classes if not already done in T83)
+- `src/app/api/review/prefill/route.ts` — modify (map typed errors to structured response codes/messages)
+- `src/__tests__/integration/ai-error-handling.integration.test.ts` — create
+
+**Functions to implement:** None new (refines T83's typed errors + adds UI surface).
+
+**Acceptance criteria:**
+- [ ] `AIRateLimitError` (429 from Anthropic) → Review screen shows AIStatusBanner: "AI suggestions temporarily rate-limited — try again in a moment. Manual categorization works as normal."
+- [ ] `AIUnavailableError` (5xx / network) → AIStatusBanner: "AI service temporarily unavailable. Manual categorization works as normal."
+- [ ] `AIParseError` → AIStatusBanner: "AI returned an unexpected response — falling back to manual. We've logged this."
+- [ ] `BudgetExceededError` → AIStatusBanner: "AI suggestions paused — monthly cap of $X.XX reached. Manual categorization works as normal. Adjust your cap in Settings if needed."
+- [ ] In ALL error cases: dropdowns remain empty (user can still manually categorize); Apply all still works for any user-filled rows
+- [ ] PrefillButton becomes disabled when AIStatusBanner is showing a non-recoverable state (cap reached, persistent unavailable); re-enabled on next page load when condition clears
+- [ ] EH-01: all errors thrown with context (which call, which merchant batch, the typed class)
+- [ ] CQ-02: AIStatusBanner < 200 lines
+
+**Tests required:**
+- `AIStatusBanner` → renders correct copy for each of the 4 error classes
+- `POST /api/review/prefill` → mocks anthropic throwing AIRateLimitError → 429-shaped structured response
+- `POST /api/review/prefill` → mocks anthropic throwing AIUnavailableError → 503-shaped structured response
+- `POST /api/review/prefill` → mocks anthropic throwing AIParseError → 502-shaped structured response
+- `POST /api/review/prefill` → mocks anthropic throwing BudgetExceededError → 402-shaped structured response (or whatever conventional we pick; document the choice in the test)
+- Integration: Pre-fill → 429 → banner shown → user manually categorizes → Apply all succeeds
+
+**Depends on:** T83, T89
+**Specialist:** @dev
+
+---
+
+## Task 92: V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on category edit
+
+**Files:**
+- `src/app/(main)/spending/TransactionRow.tsx` — modify (or wherever inline category edit lives today)
+- `src/app/(main)/spending/UpdateRulePrompt.tsx` — create (modal/dialog)
+- `src/app/api/transactions/[id]/category/route.ts` — modify (accept `updateRule: boolean` flag in PATCH body)
+- `src/__tests__/integration/spending-edit-with-rule.integration.test.ts` — create
+
+**Functions to implement:**
+- (Extends existing transaction-category PATCH route to also handle rule-update path.)
+
+**Acceptance criteria:**
+- [ ] When user edits a transaction's category inline on the Spending tab, check (via API) if a `MerchantRule` exists for `normalizeMerchant(transaction.merchant)`
+- [ ] If rule exists AND new category != rule.category → mount `UpdateRulePrompt` with options: **Yes** (update the rule and apply retroactively to all transactions with this normalized merchant where `categoryOverridden = false`), **No** (update only this transaction; sets `categoryOverridden = true`), **Cancel** (no change)
+- [ ] If rule doesn't exist OR new category matches existing rule → no prompt; behave as today (update single transaction; set `categoryOverridden = true` if changed)
+- [ ] PATCH `/api/transactions/[id]/category` body now accepts `{ category: string, updateRule?: boolean }`. When `updateRule: true`: upsert MerchantRule + UPDATE all matching transactions (source = USER). When `updateRule: false` or omitted: update single transaction only.
+- [ ] CONSTRAINT-17 echo: validates `category ∈ ALL_CATEGORIES` at the route boundary
+- [ ] EH-01: all errors thrown LOUD with context
+- [ ] CQ-02: UpdateRulePrompt < 200 lines
+- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
+
+**Tests required:**
+- Edit category on transaction whose merchant has NO existing MerchantRule → no prompt, single-transaction update succeeds
+- Edit category on transaction whose merchant has a MerchantRule, picking the SAME category as the rule → no prompt
+- Edit category differing from existing rule + click Yes → rule.category updated; all matching transactions retroactively re-categorized (where `categoryOverridden = false`)
+- Edit category differing from existing rule + click No → single transaction updated, `categoryOverridden = true`; rule unchanged
+- Edit category differing from existing rule + click Cancel → no DB change
+- PATCH with `updateRule: true` and category not in ALL_CATEGORIES → validation error
+
+**Depends on:** T79
+**Specialist:** @ui-amibroke + @data-sync
+
+---
+
+## Task 93: V1.1 Phase 2 — SECURITY.md AI Categorization section
+
+**Files:**
+- `SECURITY.md` — modify (add new section before existing reporting-process section, or wherever fits the doc's structure)
+
+**Functions to implement:** None (documentation).
+
+**Acceptance criteria:**
+- [ ] New section "AI Categorization (V1.1+)" added
+- [ ] Documents WHAT data is sent: normalized merchant strings only — never amounts, accounts, dates, balances, or any other transaction field. References CONSTRAINT-16.
+- [ ] Documents WHERE the data goes: Anthropic API (Claude Haiku 4.5). Links to Anthropic's privacy policy.
+- [ ] Documents HOW the privacy constraint is enforced: integration tests in CI (denylist regex against the prompt builder + SDK-mocked end-to-end test against captured request body)
+- [ ] Documents the user-provided-API-key model: users provide their own Anthropic API key; we never proxy data through our servers; the key is encrypted at rest (AES-256-GCM per SEC-06) and never returned to the client after save (SEC-01)
+- [ ] Documents that AI is opt-in (off by default) and that manual categorization is always functional without a key
+- [ ] Documents the monthly cost cap: hard block at user-set cap (default $5); manual flow continues to work after cap hit
+- [ ] Documents the on-out-of-list-response behavior: silently dropped + LOUD logged (CONSTRAINT-17); the transaction stays uncategorized and the manual fallback fills in
+
+**Tests required:** None (documentation).
+
+**Depends on:** T83
+**Specialist:** @security
+
+---
+
+## Task 94: V1.1 Phase 2 — E2E validation against real `amibroke` DB
+
+**Files:** None (manual validation; results recorded in `docs/session-log.md`).
+
+**Functions to implement:** None.
+
+**Acceptance criteria:**
+- [ ] Builder runs end-to-end against the real `amibroke` DB (currently 473 uncategorized transactions per Session 31 handoff)
+- [ ] Steps: (1) navigate to /settings → enable AI + paste real Anthropic key (CONSTRAINT-06 verified — key encrypted at rest), (2) click "Categorize existing transactions with AI" button — confirms ~$ cost + merchant count, (3) wait for SyncLog completion via /sync/status polling, (4) navigate to /review — verify queue shows remaining items, (5) click Pre-fill with AI on the remaining, (6) review suggestions, click Apply all
+- [ ] AC: after Apply all, Review queue is empty (zero merchants need review) OR contains only merchants the user explicitly chose to leave uncategorized
+- [ ] AC: monthly LLMCost stays under $5 cap (expected: <$0.10 based on A-14 projection + A-11 spike)
+- [ ] AC: investment-account transactions (Fidelity 401(k), Fidelity Brokerage, Robinhood, Robinhood Crypto) auto-categorized as Transfer Out at sync time (verify via DB query — no Uncategorized transactions remaining on those accounts after a fresh sync)
+- [ ] AC: dividend transactions on investment accounts still classify as "Interest & Dividends" (keyword Step 2 wins over investment-filter Step 3) — verify with a known dividend transaction
+- [ ] AC: Spending tab Transfer Out exclusion (CONSTRAINT-15) still in effect — investment internal transactions don't appear in Spending breakdown
+- [ ] AC: PRD §15 Success Metric verified: "Every uncategorized transaction has a clear, working path to categorization on the Review screen"
+- [ ] AC: no regressions in test suite (currently 256/256; T80–T92 should add ~40+ tests; final count expected ~296+/296+ green)
+- [ ] AC: `tsc` clean; `npm run build` succeeds; `npm audit` baseline unchanged (still 2 Moderates per FB-17 monitoring stance)
+- [ ] AC: builder reports privacy disclosure modal appeared correctly on first AI toggle-on
+- [ ] AC: builder reports persistent privacy banner visible on Review screen while AI is on
+- [ ] Results documented in `docs/session-log.md` (success/issues found)
+
+**Tests required:** None (manual E2E validation).
+
+**Depends on:** T79–T93.
+**Specialist:** @qa

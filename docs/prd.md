@@ -19,7 +19,7 @@
 
 ## 1. Persistent Layout
 
-**Sidebar (220px):** App name "AmIBroke" in Manrope 700 + nav links: Dashboard, Income, Spending, Investments, Net Worth, Accounts. Active nav item highlighted by background shift (no border). Fixed — never scrolls.
+**Sidebar (220px):** App name "AmIBroke" in Manrope 700 + nav links: Dashboard, Income, Spending, Investments, Net Worth, Accounts, Settings, Review. Active nav item highlighted by background shift (no border). Fixed — never scrolls. Review item shows a badge with the count of uncategorized transactions (hidden when 0). See §15 for Settings and Review surfaces (V1.1).
 
 **Top bar (full width):** Time range selector (Monthly / Quarterly / Yearly, default Monthly) on left. Pending-review badge (count of due recurring transactions, hidden when 0) center. Manual Sync button (↻) + "Last synced: X min ago" label on right.
 
@@ -180,6 +180,8 @@ Account classification: Checking, Savings, Investment, Crypto, Other → **Asset
 
 ## 10. Transaction Categorization (Auto on Import)
 
+> **Lookup precedence as of V1.1:** `MerchantRule` (§15) → keyword engine (this section) → uncategorized → routed to Review queue (§15). The keyword rules below remain authoritative for matched merchants; unmatched merchants flow to the Review queue for AI-suggested or manual categorization.
+
 Applied on first creation from SimpleFin sync or CSV import. User-set categories (`categoryOverridden = true`) are never overwritten by subsequent syncs.
 
 **Keyword rules (case-insensitive substring match against merchant description):**
@@ -300,6 +302,9 @@ Owner can demonstrate the app or share a screenshot showing `$···` everywhere
 - Per-transaction split (one transaction across two categories)
 - Investment performance tracking (cost basis, gain/loss) — balances only
 - Recurring transaction auto-confirm (user must always approve/edit/reject)
+- Multi-provider LLM support (Anthropic only in V1.1 — see §15)
+- AI-generated spending insights, summaries, or analysis (categorization only — see §15)
+- Voice or chat interface for transaction categorization
 
 ---
 
@@ -410,6 +415,136 @@ As the project owner, I want a public demo URL I can share that shows the full a
 ### Success Metric
 
 A first-time visitor can land on `swarnimb.github.io/personal-FA`, browse all six tabs with real-looking data, understand what the product does, and reach the source repo — all without installing anything and without ever touching the owner's real financial data or credentials.
+
+---
+
+## 15. AI-Assisted Categorization (V1.1)
+
+> Added 2026-05-23 via `@create-plan` interrogation. V1.1 Phase 2 — the AI accountability layer's first feature.
+
+### Problem Statement
+
+After the first SimpleFin sync, every installer (verified by this builder on 2026-05-21) faces a wall of uncategorized transactions. The keyword engine (§10) matches obvious merchants but leaves a significant tail uncategorized. SimpleFin provides no categories. This feature uses an LLM to suggest categories for uncategorized merchants, persists those suggestions as per-merchant rules so future syncs auto-apply, and keeps the user in control via an explicit review gate.
+
+### User Story
+
+As the single user of my self-hosted finance app, I want AI to suggest categories for transactions the keyword engine couldn't match, so I can review and approve them in one batch rather than categorizing each manually, while keeping my financial data on my machine.
+
+### User Flow
+
+**One-time setup**
+1. User opens new **Settings** sidebar item → AI Categorization section (default Off).
+2. Toggle on → first-time consent modal: "Enabling AI categorization sends merchant strings (only — not amounts, accounts, or dates) to Anthropic. Continue?" Requires explicit "I understand" check.
+3. User enters Anthropic API key (encrypted at rest, AES-256-GCM per CONSTRAINT-06).
+4. Monthly cost cap shown ($5 default, editable).
+
+**Daily flow**
+1. SimpleFin sync runs. Keyword engine (§10) categorizes what it can.
+2. Transactions where MerchantRule lookup AND keyword engine both fail = uncategorized.
+3. Dashboard banner: "N transactions / K merchants need review →" (mirrors AccountReviewBanner from Phase 1).
+4. User clicks → new **Review** sidebar item. Uncategorized transactions grouped by normalized merchant, sorted by count descending. Each row: displayMerchant, transaction count, sample raw description, category dropdown.
+5. If AI enabled + under cap: "Pre-fill K merchants with AI (~$0.00X)" button at top. Click fires one batched call; dropdowns fill with AI suggestion + "AI" badge.
+6. User scans, edits incorrect dropdowns (badge becomes "Edited"). Clicks "Apply all".
+7. System atomically writes `Transaction.category` for all batch rows AND upserts a MerchantRule per merchant (source = AI if user accepted unchanged, USER if edited).
+8. Subsequent syncs: matching MerchantRule auto-applies at sync time. Merchant never reappears on Review.
+
+**Backfill flow (one-time)**
+1. Settings → "Categorize existing transactions with AI" button.
+2. Confirm dialog with merchant count + cost estimate.
+3. On confirm: chunked batch run; resulting rules auto-apply to all matching existing transactions.
+
+### Business Logic
+
+**Merchant normalization (local, no LLM):**
+- Lowercase
+- Strip trailing space-separated alphanumeric tokens ≥4 chars (transaction codes)
+- Strip leading/trailing punctuation
+- Collapse internal whitespace
+
+**Lookup precedence (sync time + Review screen):**
+1. MerchantRule match on `normalizedMerchant`
+2. Keyword engine (§10)
+3. Uncategorized → Review queue
+
+**MerchantRule schema:**
+`normalizedMerchant` (unique PK), `displayMerchant` (canonical UI form), `category` (must be in ALL_CATEGORIES), `source` (USER | AI), `createdAt`, `updatedAt`.
+
+**AI prompt constraints:**
+- Income vs spending pre-classified locally (transaction amount sign + account type). LLM receives only the relevant subset of ALL_CATEGORIES.
+- Prompt instructs LLM to return exactly one category from the provided list, no explanation.
+- Response validated against the list. Out-of-list responses dropped — that merchant stays uncategorized.
+- Batched: up to 20 merchants per call, parsed as a JSON array.
+
+**Privacy:**
+- Only normalized merchant strings leave the machine. Never amounts, account names, dates, or any other field.
+
+**Cost tracking:**
+- New table `LLMCost { yearMonth: string, estimatedCentsSpent: int }`.
+- Before each call: estimate cost (input × $1/M tokens + output × $5/M), add to month total, compare to cap.
+- At cap: AI features disable until next calendar month; banner shown on Review screen; manual flow unaffected.
+
+**Model:** Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) — hard-coded in V1.1.
+
+### Acceptance Criteria
+
+**Settings:**
+- [ ] New "Settings" sidebar item; AI Categorization section with toggle, API key (masked), monthly cap input, running spend display, backfill button
+- [ ] API key encrypted at rest (CONSTRAINT-06, SEC-06); never logged or returned to client after save (SEC-01)
+- [ ] First-time toggle-on shows consent modal requiring explicit acknowledgment
+
+**Review screen:**
+- [ ] New "Review" sidebar item with badge (uncategorized count, hidden when 0)
+- [ ] Transactions grouped by normalizedMerchant, sorted by count desc
+- [ ] AI fill writes to dropdown only — DB write deferred to "Apply all"
+- [ ] AI rows show "AI" badge; edited rows show "Edited" badge
+- [ ] Persistent footer banner when AI on: "AI suggestions are sent to Anthropic — merchant strings only"
+- [ ] "Apply all" upserts MerchantRules + updates Transactions atomically
+- [ ] AI off (no key): "Pre-fill" button hidden; review fully manual
+
+**Sync integration:**
+- [ ] Lookup precedence enforced at sync time: MerchantRule → keyword engine → uncategorized
+- [ ] Existing §10 behavior unchanged for keyword-matched merchants
+
+**Cost enforcement:**
+- [ ] Monthly cap default $5, user-editable
+- [ ] Per-call cost estimate stored in LLMCost; running total compared to cap before each call
+- [ ] At cap: AI disables until next calendar month; banner shown; manual flow unaffected
+- [ ] Backfill refuses to fire if estimate exceeds remaining cap
+
+**Privacy:**
+- [ ] Integration test asserts prompt body contains ONLY merchant strings — no amount/account/date fields
+- [ ] SECURITY.md updated with "AI Categorization" section
+
+### Edge Cases
+
+- **LLM returns category not in list:** drop that merchant's response; row stays uncategorized; log warning (LOUD per error-handling rules)
+- **LLM API down / 429 / network error:** manual dropdowns only; inline banner explains; no data loss
+- **Cap reached mid-batch:** stop further calls; show partial AI results + remaining rows empty for manual
+- **User edits a categorized transaction in Spending whose merchant has a rule:** prompt "Apply to all transactions from <merchant>? Updates the rule" → if yes, retroactively re-categorize
+- **Merchant with single transaction:** appears on Review (count = 1); rule applies to future
+- **User toggles AI off after enabling:** existing AI-sourced rules remain (already user-confirmed via Apply all); no retroactive deletion
+- **CONSTRAINT-15 (Transfer Out):** prompt instructs LLM not to suggest Transfer Out (not detectable from merchant string alone); user can still pick it manually; future matches auto-categorize and remain excluded from Spending
+- **Backfill on 1000+ merchants:** chunked 20-per-call with progress indicator; cap check between chunks
+
+### Out of Scope (V1.1)
+
+- Multi-provider LLM support (OpenAI, Gemini, etc.) — Anthropic only
+- LLM fine-tuning or custom training
+- AI-generated spending insights, summaries, or analysis (categorization only)
+- Confidence scores or rationale displayed in UI
+- Voice or chat interface for categorization
+- Per-user model selection (Haiku 4.5 hard-coded)
+- AI categorization at sync time without human review (review gate is required)
+- Bulk MerchantRule editing from Review screen (edits happen in Spending tab with retroactive prompt)
+
+### Success Metric
+
+Every uncategorized transaction has a clear, working path to categorization on the Review screen — whether AI is enabled or not. Verified end-to-end by clearing the builder's current 473 uncategorized transactions.
+
+### Candidate New Constraints (for `@cto` review during architecture step)
+
+- **CONSTRAINT-16 (proposed):** LLM prompts may contain ONLY normalized merchant strings. Never amounts, account names/IDs, dates, or any other transaction field.
+- **CONSTRAINT-17 (proposed):** LLM responses validated against ALL_CATEGORIES. Out-of-list responses silently dropped — never accepted unvalidated.
 
 ---
 

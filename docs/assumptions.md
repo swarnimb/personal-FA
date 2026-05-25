@@ -10,7 +10,7 @@
 
 **Overall:** [x] Complete — all assumptions resolved or accepted
 
-**Last updated:** 2026-04-06
+**Last updated:** 2026-05-23
 
 ---
 
@@ -195,8 +195,13 @@ The Investments tab and database schema must accommodate both cases. The sync jo
 | A-08 | USD spot prices for crypto assets available at sync time | Service capability | Research | Resolved |
 | A-09 | GitHub Pages free tier suffices for static demo | Service capability + Cost | Accepted risk | Accepted |
 | A-10 | Next.js 15 `output: 'export'` compatible with AmIBroke codebase | Technical feasibility | Accepted risk | Accepted |
+| A-11 | Haiku 4.5 reliably classifies merchants into constrained list | Service capability | Spike | Resolved |
+| A-12 | Anthropic rate limits accommodate Phase 2 usage | Service capability | Research | Resolved |
+| A-13 | Local merchant normalization good enough for V1.1 | Technical feasibility | Accepted risk | Accepted |
+| A-14 | Token cost stays well under $5/month cap | Cost | Research/math | Resolved |
+| A-15 | Friends/family users tolerate providing their own API key | User behavior | Accepted risk | Accepted |
 
-**Open count: 0** — `@plan` is unblocked.
+**Open count: 0** (15/15 closed: 9 resolved, 6 accepted risk) — `@plan` and `@create-plan` both unblocked.
 
 ---
 
@@ -205,6 +210,7 @@ The Investments tab and database schema must accommodate both cases. The sync jo
 | Spike | Question answered | Result |
 |---|---|---|
 | A-04 manual check | Are user's specific banks listed on SimpleFin Bridge? | Yes — all banks confirmed available |
+| A-11 Haiku spike (2026-05-23) | Does Claude Haiku 4.5 reliably return in-list categorical responses for real merchant strings? | PASS — 20/20 in-list, all categorizations sensible, $0.000816 cost |
 
 ---
 
@@ -307,3 +313,131 @@ These assumptions produced changes to the planned architecture that must be carr
 **Related:** CONSTRAINT-13 (the prerequisite that makes this viable), CONSTRAINT-08 (cron gated off in demo so `instrumentation.ts` does not fight static export).
 
 **Status:** Accepted risk
+
+---
+
+## Added 2026-05-23 — V1.1 Phase 2: AI-Assisted Categorization (`@create-plan` interrogation)
+
+---
+
+### A-11: Claude Haiku 4.5 reliably classifies merchants into a constrained spending category list
+
+**Category:** Service capability
+
+**Assumption:** Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) returns categorical responses constrained to the project's 13-item spending category list when given a structured prompt — both reliably (high in-list rate) and sensibly (no obvious mis-categorizations).
+
+**Why it's critical:** If Haiku hallucinates out-of-list categories or categorizes poorly, the architecture's manual fallback handles correctness, but the AI feature becomes dead weight the user disables. The whole §15 spec assumes Haiku 4.5 is fit-for-purpose at this scale.
+
+**Resolution approach:** Spike
+
+**Spike script:** `tmp/spike-a11-haiku.mjs` (gitignored, throwaway per `@assumptions` rules).
+- Pulls 20 distinct uncategorized spending merchants at random from the builder's `amibroke` DB
+- Sends them through the candidate production prompt template (single batched call)
+- Reports in-list rate, token usage, cost, and a per-merchant table for qualitative inspection
+
+**Spike result (2026-05-23):**
+- **In-list rate: 20/20** (PASS criterion: ≥18) — perfect adherence
+- **Token usage:** input 416, output 80 → cost $0.000816 (single batched call)
+- **Qualitative:** all 20 categorizations were sensible given the constrained list. Restaurants → Dining & Bars, Lyft → Transport, Amazon → Shopping, City of Austin water/electric → Utilities, Macy's → Shopping, AMC → Entertainment, etc. Edge cases (CC autopay, brokerage moneyline, ETF reinvestments) routed to Transfer Out — defensible given the constrained list. Cash-advance interest → Other (no Fees category available).
+
+**Outcome:** Haiku 4.5 is fit-for-purpose. The spike's prompt template — including the explicit "no others, no variations" instruction and the JSON-array response format — becomes the implementation reference for the §15 LLM integration task.
+
+**Status:** [x] Resolved
+
+---
+
+### A-12: Anthropic API rate limits accommodate Phase 2's expected usage pattern
+
+**Category:** Service capability
+
+**Assumption:** Anthropic API default rate limits (Tier 1: ~50 req/min, ~50K input tokens/min, ~10K output tokens/min for Haiku 4.5) comfortably accommodate Phase 2's worst-case usage: backfill of ~100 merchants in 5 sequential batched calls, plus occasional new-merchant batches at sync time.
+
+**Why it's critical:** If rate limits trigger mid-batch, the Review screen needs partial-fill UX handling, which is more complex.
+
+**Resolution approach:** Research
+
+**Resolution detail:**
+- Worst-case backfill: 5 calls × ~500 tokens each = 2.5K tokens across a few seconds. Well under any documented Tier-1 ceiling.
+- Steady-state: typically 1 call per Review session for the small number of new merchants per day.
+- Spike confirmed real call shape: 416 input + 80 output tokens per batch of 20.
+
+**Contingency:** Add a 1-second sleep between batched calls if observed throttling. Implementation cost: ~3 LOC.
+
+**Status:** [x] Resolved
+
+---
+
+### A-13: Local merchant normalization regex groups near-duplicates well enough for V1.1
+
+**Category:** Technical feasibility
+
+**Assumption:** The local normalization rules in §15 (lowercase, strip trailing ≥4-char alphanumeric tokens, strip leading/trailing punctuation, collapse whitespace) group near-duplicate merchant strings tightly enough to make per-merchant persistence valuable — without needing an LLM-normalize step.
+
+**Why it's critical:** If normalization is too loose (e.g., "AMZN MKTP US*1A2B" vs "AMZN MKTP US*9X8Y" stay separate), per-merchant persistence largely fails and the Review screen floods with near-duplicates. If too tight, semantically-distinct merchants collapse.
+
+**Resolution approach:** Accepted risk with iteration contingency
+
+**Resolution detail:**
+- Spike output (A-11) showed the normalization in action on 20 real merchants. Some grouping wins ("hopdoddyburgerbar", "hunan"). Some cases still leak noise — e.g., "amex epayment ach pmt 260427 a1378 swarnim bag" retains the trailing personal-name token that the regex doesn't recognize.
+- True quality only emerges across hundreds of merchants in production. A blanket spike across all 473 uncategorized transactions would be expensive (visual review burden) and unnecessary — normalization is a code-only change with no schema implication.
+
+**Contingency:**
+1. First production run of the Review screen against real data IS the validation. Observed grouping informs regex iteration.
+2. If iteration cannot fix poor grouping for rare semantic cases, switch to LLM-normalize as a V1.2 enhancement (already listed in §15 Out of Scope as a deferred option).
+3. The `MerchantRule` schema is normalization-agnostic — the `normalizedMerchant` PK doesn't change shape if the algorithm evolves; existing rules just get re-keyed in a migration.
+
+**Status:** [x] Accepted risk
+
+---
+
+### A-14: Token cost stays well under the $5/month default cap for typical usage
+
+**Category:** Cost
+
+**Assumption:** At Claude Haiku 4.5 pricing ($1/M input tokens, $5/M output tokens), realistic monthly usage of the AI categorization feature costs orders of magnitude less than the $5/month default cap.
+
+**Why it's critical:** If cost projection is off by 10× or more, the default cap blocks legitimate use and the feature becomes annoying.
+
+**Resolution approach:** Research / math, spike-validated
+
+**Resolution detail:**
+- Spike measured per-batch (20 merchants): 416 input + 80 output tokens → $0.000816
+- Heavy monthly estimate: 200 new merchants ÷ 20 per batch = 10 batches → ~$0.008/month
+- Steady-state (typical user, ~20 new merchants/month): 1 batch → ~$0.001/month
+- $5 default cap covers >600 batches/month — would accommodate a 12,000+ new-merchant month, implausible at single-user scale
+
+**Contingency:** Cap is user-editable in Settings if an extreme user exceeds it. If Anthropic pricing changes materially, update the default cap in code (configuration, not architecture).
+
+**Status:** [x] Resolved (spike-validated)
+
+---
+
+### A-15: Friends/family-persona users will tolerate providing their own Anthropic API key
+
+**Category:** User behavior
+
+**Assumption:** Users beyond the builder (the friends/family persona noted in the project manifest) will tolerate the friction of creating an Anthropic API account and pasting an API key into Settings to enable AI categorization. The builder definitely will; whether downstream users will is unknown.
+
+**Why it's critical:** If users balk at key procurement, the AI feature sees low adoption and the product value of Phase 2 is partially lost.
+
+**Resolution approach:** Accepted risk
+
+**Resolution detail:**
+- The product design treats AI as opt-in. The Review screen works fully without a key.
+- Key procurement requires: an Anthropic account, payment method on file, generating an API key — multi-step but documented and standard for developer-adjacent users.
+- The friends/family persona is itself self-hosting (per manifest) — they've already cleared a higher friction bar (Postgres install, SimpleFin setup, Coinbase/Kraken keys).
+- The privacy story IS the product: "we don't proxy your data through our servers" → users provide their own key.
+
+**Contingency:** Manual flow is always functional. The Review screen's manual categorization path is the baseline experience; AI is a power-user upgrade. If wide adoption matters later (V2), revisit with a proxy/sponsored-key model — but that's a different product.
+
+**Status:** [x] Accepted risk
+
+---
+
+### Architectural Implications (V1.1 Phase 2)
+
+5. **A-11 — Haiku spike result:** the spike's prompt template (the `prompt` variable in the throwaway `tmp/spike-a11-haiku.mjs`) is the implementation reference for the §15 LLM integration task. The "no others, no variations" instruction and the JSON-array response format are not optional — they produced 20/20 in-list responses.
+
+6. **A-13 — Normalization iterability:** the `MerchantRule.normalizedMerchant` PK must support re-keying without data loss. The migration plan for normalization-algorithm changes is: (a) compute new normalized form for all rules, (b) merge duplicates (newest-wins by default; interactive prompt for rare conflicts).
+
+7. **Spike side-finding — investment-side noise in spending uncategorized:** the A-11 spike surfaced that brokerage reinvestment transactions (e.g., "reinvestment fidelity government money market", "reinvestment ishares tr us hlthcr pr etf") appear in `Transaction` with `amountCents < 0` and `category = 'Uncategorized'`. They would flood the Review screen as noise. Phase 2 task breakdown should include a sync-time filter that auto-categorizes transactions on Investment-type accounts as "Transfer Out" (or excludes them from the Review queue entirely). Not a Phase 2 blocker — Haiku handles them gracefully — but a quality concern worth surfacing during `@create-plan` Step 4 (technical analysis).

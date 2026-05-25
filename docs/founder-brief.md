@@ -289,3 +289,71 @@
 **Check before approving:** Anyone wiring a new spending-style query in the future should import `SPENDING_EXCLUDED_CATEGORIES` (not `INCOME_CATEGORIES`). The two are not interchangeable: income queries still filter on `INCOME_CATEGORIES` (inclusion); spending queries filter on `SPENDING_EXCLUDED_CATEGORIES` (exclusion = income + `Transfer Out`). The Dashboard's "Spending Concentration" widget is downstream of the same exclusion via `getSpendingByCategory`. There is no UI distinction yet between "real spending" and "internal transfers" in the transaction list view — that is a future product decision (a filter chip on the transactions page would do it). For now, the rule is: aggregated views hide internal transfers; itemized views show everything.
 
 **What this closes off:** Treating all `amountCents < 0` transactions as spending. That was the prior behaviour and it shipped with V1.0 — the only thing that masked it was the prior demo seed having a single tiny `Transfer Out` (auto loan payment ~$350/mo, easy to lose in the breakdown). The Task 78 mid-career persona forced the issue by adding $3k+/mo of internal transfers. CONSTRAINT-15 binds this decision so future query code cannot quietly drift back to the prior filter.
+
+---
+
+## FB-19: V1.1 Phase 2 — Anthropic LLM Integration as a Flat `src/lib/` Module
+
+**Date:** 2026-05-23
+**Architecture section:** `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2) → LLM client module
+**Plan reference:** V1.1 Phase 2 tasks (to be added by `@create-plan` Step 5)
+**Constraint reference:** CONSTRAINT-16, CONSTRAINT-17
+
+**Decided:** Anthropic Claude Haiku 4.5 integration lives in `src/lib/anthropic.ts` — flat in `src/lib/`, not nested under `src/lib/llm/`. Matches the precedent set by `coinbase.ts` and `kraken.ts` (one file per external service client). V1.1 is single-provider by deliberate choice; if V1.2 adds providers, refactor to `src/lib/llm/{provider}.ts` behind a shared interface then. API key encrypted at rest using the existing 3-field pattern (`encrypted*` + `iv` + `authTag`) from `ExchangeConnection` / `SimplefinConnection`. Cost-enforcement wrapper pre-checks every call against the user-set monthly cap on `AppSettings.aiMonthlyCapCents` (default $5.00).
+
+**Means for your product:** Adding more LLM providers in V1.2 (OpenAI, Gemini, etc.) requires a bounded refactor — `src/lib/anthropic.ts` → `src/lib/llm/anthropic.ts` + siblings behind a shared interface — not a rewrite. You're not locked into Anthropic forever, just locked in for V1.1. Encryption uses the same pattern your Coinbase/Kraken keys already use, so there's nothing new to learn or secure.
+
+**Check before approving:** Do you want an `aiProvider` enum column on `AppSettings` now (preparing for V1.2 multi-provider) or wait until V1.2 actually needs it? My recommendation: wait — adds complexity without value today, and "add a column" is a trivial migration when V1.2 lands. Surfacing this so you know the trade-off.
+
+**What this closes off:** Reusing `src/lib/anthropic.ts` for non-categorization LLM features (insights, summaries, etc.) is blocked by CONSTRAINT-16 — those features need their own modules with their own consent gates. Switching V1.1 to a different LLM provider (OpenAI, Gemini) without the V1.2 refactor would require rewriting `anthropic.ts` rather than swapping providers cleanly.
+
+---
+
+## FB-20: V1.1 Phase 2 — Categorization Lookup Precedence + Investment-Account Auto-Categorization
+
+**Date:** 2026-05-23
+**Architecture section:** `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2) → Categorization lookup precedence
+**Plan reference:** V1.1 Phase 2 tasks (to be added by `@create-plan` Step 5)
+**Constraint reference:** CONSTRAINT-15 (Transfer Out exclusion from Spending — the auto-categorized investment transactions ride on this constraint)
+
+**Decided:** The categorization function used at sync time AND when querying the Review queue has a 4-step precedence: (1) `MerchantRule` match on `normalizedMerchant`, (2) keyword engine (existing `categorization-rules.ts`), (3) if Step 2 returned `Uncategorized` AND the transaction is on an Investment or Crypto account, auto-categorize as `Transfer Out`, (4) otherwise stays `Uncategorized` and flows to the Review queue. Step 3 was added as a direct fix for the A-11 spike's side-finding (brokerage reinvestments were appearing in the Uncategorized pile).
+
+**Means for your product:** Your 2 Fidelity accounts and 2 Robinhood accounts won't dump reinvestment noise (`reinvestment fidelity government money market`, `reinvestment ishares...`, `buy 90.260000 xlm`) into the Review queue. Those auto-classify as Transfer Out at sync time. CONSTRAINT-15 already excludes Transfer Out from Spending calculations, so these stay correctly out of your Spending tab. Dividend payouts ("INTEREST", "DIVIDEND" keyword matches) still classify as "Interest & Dividends" — Step 2 wins over Step 3.
+
+**Check before approving:** A genuine expense paid from a brokerage account (e.g., a wire-transfer fee, a margin interest charge that isn't keyword-matched) would auto-route to Transfer Out and you'd need to manually correct it in the Spending tab. Rare for these account types but possible — comfortable with that trade-off?
+
+**What this closes off:** Distinguishing dividend reinvestments from cash withdrawals at sync time (i.e., a more sophisticated investment-account categorization layer) is out of scope for V1.1. V2 candidate if it becomes a real problem. For now, "internal investment activity = Transfer Out" is the simple rule.
+
+---
+
+## FB-21: V1.1 Phase 2 — `AppSettings` Singleton (First In-App Settings Surface)
+
+**Date:** 2026-05-23
+**Architecture section:** `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2) → New data model → `AppSettings`, Settings surface
+**Plan reference:** V1.1 Phase 2 tasks (to be added by `@create-plan` Step 5)
+**Constraint reference:** CONSTRAINT-06 (encryption pattern reused for the LLM key)
+
+**Decided:** A new singleton-row `AppSettings` table holds all in-app configuration. V1.1 Phase 2 fills the `ai*`-prefixed columns (`aiEnabled`, `aiEncryptedApiKey`, `aiIv`, `aiAuthTag`, `aiMonthlyCapCents`, `aiConsentAcknowledged`). Future settings categories add their own column prefixes (`sync*`, `display*`, etc.) so the table stays flat and type-safe. The Settings page lives at `src/app/(main)/settings/page.tsx` (server component) with `AISettingsForm.tsx` as the client interactive piece. API routes under `src/app/api/settings/ai/*`. API key is encrypted on save and never returned to the client thereafter.
+
+**Means for your product:** You now have a place to add user-facing configuration — current and future. The Sidebar gets a new "Settings" nav item (between "Accounts" and "Review" per PRD §15). Each new setting category gets its own column group in `AppSettings`, not a fat JSON blob. This is the user-chosen path (generalized `AppSettings` table) vs the more scoped `LLMSettings` alternative — slightly more upfront work to design column-prefix conventions, but better positioned for V1.1 Phase 3+ additions.
+
+**Check before approving:** Choosing explicit Prisma columns over a JSON config blob makes it slightly more work to remove a setting later (requires migration). Comfortable with that trade-off in exchange for type safety and queryability?
+
+**What this closes off:** Migrating to a generic key-value `Settings { key, value }` table later would be disruptive — existing AI settings would need to be re-shaped. If you anticipate needing dynamic settings keys (e.g., per-user config in a hypothetical multi-user V3), revisit before V1.1 implementation. For V1.1's single-user reality, explicit columns are the right call.
+
+---
+
+## FB-22: V1.1 Phase 2 — Binding Constraints on All LLM Use (CONSTRAINT-16 + CONSTRAINT-17)
+
+**Date:** 2026-05-23
+**Architecture section:** `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2) → Privacy enforcement test
+**Plan reference:** V1.1 Phase 2 tasks (to be added by `@create-plan` Step 5)
+**Constraint reference:** CONSTRAINT-16, CONSTRAINT-17 (both newly added in this consult)
+
+**Decided:** Two new binding constraints govern every LLM use case in this application — not just V1.1 categorization. **CONSTRAINT-16:** LLM prompts contain ONLY normalized merchant strings and the constrained category list. Never amounts, accounts, dates, balances, or any other transaction field. Enforced by a denylist regex test against `buildCategorizationPrompt()` plus an SDK-mocked end-to-end test asserting the captured request body satisfies the same denylist. **CONSTRAINT-17:** LLM responses validated against an explicit allowed-values list. Out-of-list responses dropped (LOUD log), never accepted as data; the affected field stays uncategorized and manual fallback fills in.
+
+**Means for your product:** The privacy promise shown to the user in PRD §15 and `SECURITY.md` is enforced by a CI test, not by a developer remembering to follow a guideline. A code change that leaks `amountCents` or `accountId` into a prompt fails the build. Model hallucinations cannot quietly corrupt your transaction categories — they get rejected and surface as manual-review items instead. Both constraints scope to ALL LLM use cases this app will ever have, not just V1.1 categorization.
+
+**Check before approving:** These constraints add real friction for future LLM features. A V2 "summarize my spending" feature would need a separate module with its own consent disclosure (it cannot use the categorization pipeline). A V2 "natural-language transaction search" feature would need its own response-validation contract since open-ended text doesn't fit the constrained-list pattern. Is that the level of friction you want for future LLM features that touch financial data? My recommendation: yes — financial-data LLM use cases deserve explicit per-feature design.
+
+**What this closes off:** Quick "let's throw transaction data at Claude and see what it says" prototyping inside the existing categorization module. Every LLM use case in this app now requires: an explicit prompt-shape contract (CONSTRAINT-16 denylist applies), an explicit response-validation contract (CONSTRAINT-17 allowed-values or alternative), and per-feature consent if user data is involved. Intentional friction.

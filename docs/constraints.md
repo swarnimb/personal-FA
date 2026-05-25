@@ -194,6 +194,30 @@
 
 ---
 
+### CONSTRAINT-16: LLM prompts contain ONLY normalized merchant strings — never amounts, accounts, dates, or any other transaction field
+
+**Decision:** Every LLM call this application makes may include only (a) one or more normalized merchant strings, and (b) the constrained category list. No amounts, account names or IDs, balances, dates, transaction IDs, or any other field from the `Transaction` row may appear in any prompt. The `src/lib/anthropic.ts` module's `buildCategorizationPrompt()` is the only sanctioned prompt builder for V1.1 Phase 2 and is tested against a denylist regex (`/\$\d|amountCents|accountId|account_id|\d{4}-\d{2}-\d{2}|ISO\s*date/i`) plus an SDK-mocked end-to-end test asserting the captured request body satisfies the same denylist.
+
+**What it means in practice:** The privacy commitment surfaced to the user in `docs/prd.md` § 15 and `SECURITY.md` is enforced by an integration test, not by convention. A future change that tries to enrich the prompt with transaction context (e.g., "spent $47 at this merchant" to improve categorization) fails CI. Any new LLM use case beyond categorization cannot reuse the categorization pipeline — by design — and must implement its own privacy review, consent gate, and prompt builder.
+
+**Who decided and when:** `@cto` consult during V1.1 Phase 2 planning, builder approved 2026-05-23.
+
+**What this closes off:** A future "summarize my spending" or "AI insights" feature that wants to send transaction amounts to the LLM cannot pass through `src/lib/anthropic.ts` as it stands. The architecture requires that feature to build its own LLM module with its own privacy disclosure flow. This is intentional friction — LLM use cases that touch financial data deserve explicit, per-feature consent and review.
+
+---
+
+### CONSTRAINT-17: LLM responses validated against an explicit allowed-values list — out-of-list responses silently dropped, never accepted as data
+
+**Decision:** Every LLM call site that produces categorical or enumerated data must validate each response value against an explicit allowed-values list before accepting it. Responses outside the allowed list are dropped — the corresponding field stays uncategorized (or in whatever pre-LLM state it was in) and the manual fallback path fills it in. Validation failures are logged LOUD per `rules/error-handling.md`. No silent acceptance of unconstrained model output as data is permitted.
+
+**What it means in practice:** Model hallucinations, prompt drift, model version changes, and out-of-prompt-instruction responses cannot quietly corrupt application data. If Haiku returns `"Misc"` instead of one of the 13 spending categories, the transaction stays Uncategorized and surfaces on the Review queue for manual handling. The validation failure is observable in logs.
+
+**Who decided and when:** `@cto` consult during V1.1 Phase 2 planning, builder approved 2026-05-23.
+
+**What this closes off:** LLM use cases requiring open-ended responses (free-form summaries, generated descriptions, natural-language explanations) need their own contract for what constitutes "valid output" and how invalid outputs are handled. They can't piggyback on the constrained-categorization pattern. Adding such a use case requires an explicit decision about what validation looks like — either an alternative allowed-values list, a structured schema validation (JSON schema, regex, etc.), or an accepted-risk note in `assumptions.md` if no validation is possible.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -213,3 +237,5 @@
 | 13 | Financial query fns in shared `src/lib/` module | Never page-private; must be integration-testable | QA finding / builder | 2026-05-15 |
 | 14 | seed-demo.ts requires pre-commit confirmation | `.githooks/pre-commit` prompts on every staged change; non-interactive blocked | Task 76 / @security / builder | 2026-05-20 |
 | 15 | Internal transfers excluded from Spending view | All spending-side queries filter on `SPENDING_EXCLUDED_CATEGORIES` (income + `Transfer Out`) | Task 78 / FB-18 / builder | 2026-05-21 |
+| 16 | LLM prompts contain only normalized merchant strings | No transaction fields ever appear in prompts; integration test enforces the denylist | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |
+| 17 | LLM responses validated against allowed-values list | Out-of-list responses dropped with LOUD log, never accepted as data | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |

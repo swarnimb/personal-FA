@@ -56,6 +56,11 @@ enum SyncStatus {
   failed
 }
 
+enum MerchantRuleSource {
+  USER
+  AI
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -165,6 +170,33 @@ model SyncLog {
   transactionsUpdated   Int        @default(0)
   errors                Json?
   createdAt             DateTime   @default(now())
+}
+
+model MerchantRule {
+  normalizedMerchant String             @id
+  displayMerchant    String
+  category           String
+  source             MerchantRuleSource
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model LLMCost {
+  yearMonth           String   @id
+  estimatedCentsSpent Int      @default(0)
+  updatedAt           DateTime @updatedAt
+}
+
+model AppSettings {
+  id                    String   @id @default("singleton")
+  aiEnabled             Boolean  @default(false)
+  aiEncryptedApiKey     String?
+  aiIv                  String?
+  aiAuthTag             String?
+  aiMonthlyCapCents     Int      @default(500)
+  aiConsentAcknowledged Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------
