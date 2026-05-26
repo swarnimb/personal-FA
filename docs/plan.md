@@ -92,7 +92,7 @@
 | 79 | V1.1 Phase 2 — Schema migrations (MerchantRule + LLMCost + AppSettings) | [x] |
 | 80 | V1.1 Phase 2 — Merchant normalization library | [x] |
 | 81 | V1.1 Phase 2 — Categorization lookup precedence refactor | [ ] |
-| 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [ ] |
+| 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [x] |
 | 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [ ] |
 | 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [ ] |
 | 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [ ] |
@@ -2927,7 +2927,7 @@ model AppSettings {
 **Files:**
 - `package.json` — modify (add `@anthropic-ai/sdk` dependency, pinned caret-style per FB-06 precedent)
 - `src/lib/anthropic.ts` — create (foundation only — full categorize logic in T83)
-- `src/__tests__/integration/anthropic-foundation.integration.test.ts` — create
+- `src/__tests__/lib/anthropic.test.ts` — create (path corrected from `integration/anthropic-foundation.integration.test.ts` at completion — tests use mocked Prisma + mocked crypto, so they belong in `lib/` per Session 33 T80 precedent + `vitest.config.ts` which excludes `integration/**` from `npm test`)
 
 **Functions to implement:**
 - `async function isAIAvailable(): Promise<{ enabled: boolean; reason?: 'NO_KEY' | 'AT_CAP' | 'DISABLED' }>` — fetches AppSettings + current LLMCost; returns enabled state with reason on failure
@@ -2936,15 +2936,15 @@ model AppSettings {
 - `async function getCurrentMonthSpend(): Promise<number>` — fetches LLMCost for current `yearMonth` (e.g., `"2026-05"`); returns 0 if no row
 
 **Acceptance criteria:**
-- [ ] `@anthropic-ai/sdk` installed at latest stable, pinned `^x.y.z` style (matches FB-06 Prisma pinning convention)
-- [ ] `isAIAvailable()` returns `{ enabled: false, reason: 'DISABLED' }` when `aiEnabled = false`
-- [ ] `isAIAvailable()` returns `{ enabled: false, reason: 'NO_KEY' }` when `aiEnabled = true` but no encrypted key
-- [ ] `isAIAvailable()` returns `{ enabled: false, reason: 'AT_CAP' }` when current-month spend ≥ `aiMonthlyCapCents`
-- [ ] `isAIAvailable()` returns `{ enabled: true }` (no reason) when key present + under cap + enabled
-- [ ] `estimateBatchCost(20)` returns approximately the A-11 spike value (target: ≤ 100 cents = $0.01; spike measured ~$0.0008; allow generous headroom)
-- [ ] `getDecryptedKey()` uses `decrypt()` from `src/lib/crypto.ts`; throws LOUD on decryption failure with context (which fields were null vs corrupt)
-- [ ] SEC-01: decrypted key value NEVER logged, NEVER included in any error message, NEVER returned in stringified form to any caller other than `categorizeMerchants` (which uses it immediately and lets it go out of scope)
-- [ ] CQ-01: each function < 50 lines
+- [x] `@anthropic-ai/sdk` installed at latest stable, pinned `^x.y.z` style (matches FB-06 Prisma pinning convention)
+- [x] `isAIAvailable()` returns `{ enabled: false, reason: 'DISABLED' }` when `aiEnabled = false`
+- [x] `isAIAvailable()` returns `{ enabled: false, reason: 'NO_KEY' }` when `aiEnabled = true` but no encrypted key
+- [x] `isAIAvailable()` returns `{ enabled: false, reason: 'AT_CAP' }` when current-month spend ≥ `aiMonthlyCapCents`
+- [x] `isAIAvailable()` returns `{ enabled: true }` (no reason) when key present + under cap + enabled
+- [x] `estimateBatchCost(20)` returns approximately the A-11 spike value (target: ≤ 100 cents = $0.01; spike measured ~$0.0008; allow generous headroom)
+- [x] `getDecryptedKey()` uses `decrypt()` from `src/lib/crypto.ts`; throws LOUD on decryption failure with context (which fields were null vs corrupt)
+- [x] SEC-01: decrypted key value NEVER logged, NEVER included in any error message, NEVER returned in stringified form to any caller other than `categorizeMerchants` (which uses it immediately and lets it go out of scope)
+- [x] CQ-01: each function < 50 lines
 
 **Tests required:**
 - `isAIAvailable` → returns DISABLED reason when aiEnabled false (mocked DB)
