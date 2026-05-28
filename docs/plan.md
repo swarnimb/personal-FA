@@ -91,7 +91,7 @@
 | 78 | Demo Data Overhaul — Full Mid-Career Persona (balanced books) + Spending exclusion fix | [x] |
 | 79 | V1.1 Phase 2 — Schema migrations (MerchantRule + LLMCost + AppSettings) | [x] |
 | 80 | V1.1 Phase 2 — Merchant normalization library | [x] |
-| 81 | V1.1 Phase 2 — Categorization lookup precedence refactor | [ ] |
+| 81 | V1.1 Phase 2 — Categorization lookup precedence refactor | [x] |
 | 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [x] |
 | 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [ ] |
 | 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [ ] |
@@ -2900,25 +2900,32 @@ model AppSettings {
 - (Existing keyword-engine function stays in place; this wraps it.)
 
 **Acceptance criteria:**
-- [ ] 4-step precedence matches `docs/architecture.md` § Categorization lookup precedence exactly
-- [ ] Step 3 fires ONLY when Step 2 returned `'Uncategorized'` — a dividend keyword match on an investment account still routes to `Interest & Dividends`
-- [ ] User-confirmed categorizations (`categoryOverridden = true`) are NEVER re-categorized (preserves V1.0 contract + Session 31 next-session-constraint)
-- [ ] Sync flow (`sync-simplefin.ts`) passes the `account.type` into `categorizeTransaction` — no longer categorizes from merchant string alone
-- [ ] CONSTRAINT-15 echo: auto-Transfer-Out transactions on investment accounts inherit the Transfer Out exclusion from Spending (no new code needed — CONSTRAINT-15 already enforces this in `SPENDING_EXCLUDED_CATEGORIES`)
-- [ ] EH-01: any unexpected `MerchantRule` lookup error throws LOUD with context
-- [ ] CQ-01: function < 50 lines (extract helpers if needed)
+- [x] 4-step precedence matches `docs/architecture.md` § Categorization lookup precedence exactly
+- [x] Step 3 fires ONLY when Step 2 returned `'Uncategorized'` — a dividend keyword match on an investment account still routes to `Interest & Dividends`
+- [x] User-confirmed categorizations (`categoryOverridden = true`) are NEVER re-categorized (preserves V1.0 contract + Session 31 next-session-constraint)
+- [x] Sync flow (`sync-simplefin.ts`) passes the `account.type` into `categorizeTransaction` — no longer categorizes from merchant string alone
+- [x] CONSTRAINT-15 echo: auto-Transfer-Out transactions on investment accounts inherit the Transfer Out exclusion from Spending (no new code needed — CONSTRAINT-15 already enforces this in `SPENDING_EXCLUDED_CATEGORIES`)
+- [x] EH-01: any unexpected `MerchantRule` lookup error throws LOUD with context
+- [x] CQ-01: function < 50 lines (extract helpers if needed)
 
 **Tests required:**
-- `categorizeTransaction` → MerchantRule wins over keyword (mock rule for 'amazon' → Shopping; raw `'AMAZON.COM'` → returns Shopping even though keyword would say Shopping anyway; test with a non-default rule like 'amazon' → Subscriptions to verify rule wins)
-- `categorizeTransaction` → keyword wins over investment-filter (account.type = Investment + merchant 'DIVIDEND PAYMENT' → returns Interest & Dividends, not Transfer Out)
-- `categorizeTransaction` → investment-filter fires when keyword returns Uncategorized on Investment account → returns Transfer Out
-- `categorizeTransaction` → bank account + unknown merchant → returns Uncategorized (not Transfer Out)
-- `categorizeTransaction` → user-overridden transaction not re-categorized (the sync caller respects `categoryOverridden`)
-- Integration: sync upserts a new transaction on a Fidelity Investment account with a reinvestment description → final `category = 'Transfer Out'`
-- Integration: sync upserts a new transaction on a Chase Checking account with 'WHOLE FOODS' description → final `category = 'Groceries'` (keyword match)
+- [x] `categorizeTransaction` → MerchantRule wins over keyword (mock rule for 'amazon' → Subscriptions; raw `'AMAZON'` → returns Subscriptions to verify rule wins)
+- [x] `categorizeTransaction` → keyword wins over investment-filter (account.type = Investment + merchant 'DIVIDEND PAYMENT' → returns Interest & Dividends, not Transfer Out)
+- [x] `categorizeTransaction` → investment-filter fires when keyword returns Uncategorized on Investment account → returns Transfer Out
+- [x] `categorizeTransaction` → bank account + unknown merchant → returns Uncategorized (not Transfer Out)
+- [x] `categorizeTransaction` → user-overridden transaction not re-categorized (verified in `sync-simplefin.test.ts` — sync caller respects `categoryOverridden`)
+- [x] Integration: sync upserts a new transaction on an Investment account with a reinvestment description → final `category = 'Transfer Out'`
+- [x] Integration: sync upserts a new transaction on a Checking account with 'WHOLE FOODS' description → final `category = 'Groceries'` (keyword match)
+
+**Notes (from execution):**
+- Implemented signature added `amountCents` to the input: `categorizeTransaction({ merchant, amountCents }, { type })`. Dropping `amountCents` would have regressed the V1.0 keyword engine's sign-aware Transfer In/Out disambiguation; architecture.md framing as `(transaction, account)` is consistent with passing the full input. Approved by builder before execution.
+- Sync integration was an addition, not a refactor — `upsertTransaction` previously inserted with the Prisma default `'Uncategorized'`. Approved by builder before execution.
+- `src/app/api/import/csv/confirm/route.ts` was a follow-on update (existing caller of the old sync signature). Loads `account.type` once before the row loop; returns 404 if account not found.
+- Unit-test path is `src/__tests__/lib/categorize.test.ts` (current project convention) rather than the spec's `src/__tests__/unit/categorize.test.ts`.
 
 **Depends on:** T79, T80
 **Specialist:** @data-sync
+**Completed:** 2026-05-27
 
 ---
 

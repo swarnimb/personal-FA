@@ -14,6 +14,7 @@ vi.mock('@/lib/db', () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    merchantRule: { findUnique: vi.fn() },
   },
 }))
 
@@ -40,7 +41,10 @@ const mockDb = db as unknown as {
   account: { upsert: MockFn; findUnique: MockFn }
   holding: { deleteMany: MockFn; create: MockFn }
   transaction: { findUnique: MockFn; create: MockFn; update: MockFn }
+  merchantRule: { findUnique: MockFn }
 }
+
+const CHECKING_ACCOUNT = { id: 'db-acct-001', type: 'Checking' as const }
 
 const mockFetchAccounts = fetchAccounts as MockFn
 const mockFetchTransactions = fetchTransactions as MockFn
@@ -57,13 +61,15 @@ const makeTx = (overrides: Partial<SimplefinTransaction> = {}): SimplefinTransac
 describe('upsertTransaction', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: no MerchantRule. categorize falls through to keyword/precedence.
+    mockDb.merchantRule.findUnique.mockResolvedValue(null)
   })
 
   it('inserts new transaction', async () => {
     mockDb.transaction.findUnique.mockResolvedValue(null)
     mockDb.transaction.create.mockResolvedValue({ id: 'db-tx-001' })
 
-    const result = await upsertTransaction(makeTx(), 'db-acct-001')
+    const result = await upsertTransaction(makeTx(), CHECKING_ACCOUNT)
 
     expect(result).toBe('inserted')
     expect(mockDb.transaction.create).toHaveBeenCalledWith(
@@ -82,7 +88,7 @@ describe('upsertTransaction', () => {
     mockDb.transaction.findUnique.mockResolvedValue({ id: 'db-tx-001', categoryOverridden: false })
     mockDb.transaction.update.mockResolvedValue({ id: 'db-tx-001' })
 
-    const result = await upsertTransaction(makeTx({ amount: '-30.00' }), 'db-acct-001')
+    const result = await upsertTransaction(makeTx({ amount: '-30.00' }), CHECKING_ACCOUNT)
 
     expect(result).toBe('updated')
     expect(mockDb.transaction.update).toHaveBeenCalledWith(
@@ -98,7 +104,7 @@ describe('upsertTransaction', () => {
     mockDb.transaction.findUnique.mockResolvedValue({ id: 'db-tx-001', categoryOverridden: true })
     mockDb.transaction.update.mockResolvedValue({ id: 'db-tx-001' })
 
-    await upsertTransaction(makeTx(), 'db-acct-001')
+    await upsertTransaction(makeTx(), CHECKING_ACCOUNT)
 
     const updateCall = mockDb.transaction.update.mock.calls[0][0] as { data: Record<string, unknown> }
     expect(updateCall.data).not.toHaveProperty('category')

@@ -5,6 +5,12 @@ vi.mock('@/lib/db', () => ({
     transaction: {
       createMany: vi.fn(),
     },
+    account: {
+      findUnique: vi.fn(),
+    },
+    merchantRule: {
+      findUnique: vi.fn(),
+    },
   },
 }))
 
@@ -47,6 +53,8 @@ describe('POST /api/import/csv', () => {
 describe('POST /api/import/csv/confirm', () => {
   it('inserts valid rows and reports invalid row errors', async () => {
     vi.mocked(db.transaction.createMany).mockResolvedValue({ count: 1 })
+    vi.mocked(db.account.findUnique).mockResolvedValue({ type: 'Checking' } as never)
+    vi.mocked(db.merchantRule.findUnique).mockResolvedValue(null as never)
 
     const csvWithBadRow = `date,amount,description
 2026-04-01,-45.23,TRADER JOES 123

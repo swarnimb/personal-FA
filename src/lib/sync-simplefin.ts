@@ -1,4 +1,6 @@
 import { AccountSource, TransactionStatus } from '@prisma/client'
+import type { AccountType } from '@prisma/client'
+import { categorizeTransaction } from './categorize'
 import { decrypt } from './crypto'
 import { db } from './db'
 import { isDemoMode } from './demo-mode'
@@ -24,7 +26,7 @@ async function refreshHoldings(accountId: string, holdings: SimplefinHolding[]):
   }
 }
 
-async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string }> {
+async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string; type: AccountType }> {
   const rawBalanceCents = Math.round(parseFloat(sfAccount.balance) * 100)
   const hasHoldings = (sfAccount.holdings ?? []).length > 0
   const institution = sfAccount.org?.name ?? sfAccount.org?.domain ?? null
@@ -71,40 +73,51 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string 
   if (hasHoldings) {
     await refreshHoldings(account.id, sfAccount.holdings!)
   }
-  return { id: account.id }
+  return { id: account.id, type: accountType }
 }
 
 export async function upsertTransaction(
   tx: SimplefinTransaction,
-  accountId: string,
+  account: { id: string; type: AccountType },
 ): Promise<'inserted' | 'updated'> {
   const amountCents = Math.round(parseFloat(tx.amount) * 100)
   const date = new Date(tx.posted * 1000)
+  const status = tx.pending ? TransactionStatus.pending : TransactionStatus.confirmed
   const existing = await db.transaction.findUnique({
     where: { externalId: tx.id },
     select: { id: true, categoryOverridden: true },
   })
   if (!existing) {
+    const category = await categorizeTransaction(
+      { merchant: tx.description, amountCents },
+      { type: account.type },
+    )
     await db.transaction.create({
       data: {
-        accountId,
+        accountId: account.id,
         externalId: tx.id,
         date,
         merchant: tx.description,
         amountCents,
-        status: tx.pending ? TransactionStatus.pending : TransactionStatus.confirmed,
+        category,
+        status,
       },
     })
     return 'inserted'
   }
+  // Preserve user-confirmed categorizations (V1.0 contract): re-categorize
+  // only when the user has not overridden the row.
+  const categoryUpdate = existing.categoryOverridden
+    ? {}
+    : {
+        category: await categorizeTransaction(
+          { merchant: tx.description, amountCents },
+          { type: account.type },
+        ),
+      }
   await db.transaction.update({
     where: { id: existing.id },
-    data: {
-      merchant: tx.description,
-      amountCents,
-      date,
-      status: tx.pending ? TransactionStatus.pending : TransactionStatus.confirmed,
-    },
+    data: { merchant: tx.description, amountCents, date, status, ...categoryUpdate },
   })
   return 'updated'
 }
@@ -143,12 +156,12 @@ export async function syncSimplefin(): Promise<{
       const endDate = new Date()
 
       const sfAccounts = await fetchAccounts(accessUrl)
-      const accountIdMap = new Map<string, string>()
+      const accountMap = new Map<string, { id: string; type: AccountType }>()
 
       for (const sfAccount of sfAccounts) {
         try {
           const account = await upsertAccount(sfAccount)
-          accountIdMap.set(sfAccount.id, account.id)
+          accountMap.set(sfAccount.id, account)
           accountsSynced++
         } catch (err) {
           errors.push(
@@ -160,13 +173,13 @@ export async function syncSimplefin(): Promise<{
       const transactions = await fetchTransactions(accessUrl, startDate, endDate)
 
       for (const tx of transactions) {
-        const accountId = accountIdMap.get(tx.accountExternalId)
-        if (!accountId) {
+        const account = accountMap.get(tx.accountExternalId)
+        if (!account) {
           errors.push(`Transaction ${tx.id}: no matching account for ${tx.accountExternalId}`)
           continue
         }
         try {
-          const result = await upsertTransaction(tx, accountId)
+          const result = await upsertTransaction(tx, account)
           if (result === 'inserted') inserted++
           else updated++
         } catch (err) {

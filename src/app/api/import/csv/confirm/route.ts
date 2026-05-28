@@ -29,6 +29,13 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: fieldName && isGeneric ? `${fieldName} is required` : issue.message }, { status: 400 })
   }
   const { accountId, columnMapping, fileContent } = parsed.data
+  const account = await db.account.findUnique({
+    where: { id: accountId },
+    select: { type: true },
+  })
+  if (!account) {
+    return Response.json({ error: `Account ${accountId} not found` }, { status: 404 })
+  }
   const rows = parseCSV(fileContent)
   const headerRow = rows[0] ?? []
   const errors: { row: number; error: string }[] = []
@@ -39,12 +46,16 @@ export async function POST(req: Request): Promise<Response> {
   for (let i = 1; i < rows.length; i++) {
     try {
       const [tx] = mapColumns([headerRow, rows[i]], columnMapping)
+      const category = await categorizeTransaction(
+        { merchant: tx.merchant, amountCents: tx.amountCents },
+        { type: account.type },
+      )
       inserts.push({
         accountId,
         date: tx.date,
         merchant: tx.merchant,
         amountCents: tx.amountCents,
-        category: categorizeTransaction(tx.merchant, tx.amountCents),
+        category,
         status: TransactionStatus.confirmed,
       })
     } catch (err) {
