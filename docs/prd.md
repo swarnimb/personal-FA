@@ -19,7 +19,7 @@
 
 ## 1. Persistent Layout
 
-**Sidebar (220px):** App name "AmIBroke" in Manrope 700 + nav links: Dashboard, Income, Spending, Investments, Net Worth, Accounts, Settings, Review. Active nav item highlighted by background shift (no border). Fixed — never scrolls. Review item shows a badge with the count of uncategorized transactions (hidden when 0). See §15 for Settings and Review surfaces (V1.1).
+**Sidebar (220px):** App name "AmIBroke" in Manrope 700 + nav links: Dashboard, Net Worth, Income, Spending, Investments, Accounts, Settings, Review. (Net Worth sits 2nd per Task 39's "Sidebar nav order fix"; T84 appended Settings + Review without disturbing the existing order — builder decision Session 35.) Active nav item highlighted by background shift (no border). Fixed — never scrolls. Review item shows a badge with the count of uncategorized transactions (hidden when 0). See §15 for Settings and Review surfaces (V1.1).
 
 **Top bar (full width):** Time range selector (Monthly / Quarterly / Yearly, default Monthly) on left. Pending-review badge (count of due recurring transactions, hidden when 0) center. Manual Sync button (↻) + "Last synced: X min ago" label on right.
 
