@@ -93,7 +93,7 @@
 | 80 | V1.1 Phase 2 — Merchant normalization library | [x] |
 | 81 | V1.1 Phase 2 — Categorization lookup precedence refactor | [x] |
 | 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [x] |
-| 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [ ] |
+| 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [x] |
 | 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [ ] |
 | 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [ ] |
 | 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
@@ -2984,20 +2984,20 @@ model AppSettings {
 - Typed error classes: `AIUnavailableError`, `BudgetExceededError`, `AIParseError`, `AIRateLimitError` (all extend Error; constructor takes context)
 
 **Acceptance criteria:**
-- [ ] `categorizeMerchants` throws `AIUnavailableError` (LOUD) when `isAIAvailable()` returns enabled false
-- [ ] `categorizeMerchants` throws `BudgetExceededError` when `currentMonthSpend + estimatedBatchCost > aiMonthlyCapCents`
-- [ ] Input > 20 merchants: split into chunks of 20, separate SDK call per chunk, results concatenated (cap-checked between chunks)
-- [ ] Income/spending pre-classified: when `isSpending = true`, prompt uses `SPENDING_CATEGORIES` from `src/lib/categories.ts`; else `INCOME_CATEGORIES`
-- [ ] **CONSTRAINT-16 (privacy):** `buildCategorizationPrompt` output contains each provided `merchants[i]` AND the provided `categories.join(', ')` AND nothing else dynamic. Asserted by integration test denylist regex: `/\$\d|amountCents|accountId|account_id|\d{4}-\d{2}-\d{2}|ISO\s*date/i`. Same denylist asserted against captured SDK request body in SDK-mocked test.
-- [ ] **CONSTRAINT-17 (response validation):** `parseLLMResponse` returns `null` for any value not in `allowedCategories` (no fuzzy matching, no normalization — strict equality). Validation failure logged LOUD with the rejected value, the merchant index, and the raw response.
-- [ ] LLM API 429 surfaces as `AIRateLimitError` (typed) — propagated to caller
-- [ ] LLM API 5xx/network surfaces as `AIUnavailableError` (typed) — propagated to caller
-- [ ] JSON parse failure surfaces as `AIParseError` (typed, with raw text in context) — propagated to caller
-- [ ] `incrementMonthCost` upsert happens AFTER successful SDK call, OUTSIDE any DB transaction (LLM latency must not hold a Postgres connection per architecture.md)
-- [ ] Race-condition acknowledgment: two concurrent calls may both pass pre-check; soft cap accepted (single-user app; max ~$0.001 overshoot)
-- [ ] Decrypted key used immediately in SDK constructor scope; not stored anywhere (SEC-01)
-- [ ] SEC-01: API key never logged, never in error context
-- [ ] CQ-01: each function < 50 lines
+- [x] `categorizeMerchants` throws `AIUnavailableError` (LOUD) when `isAIAvailable()` returns enabled false
+- [x] `categorizeMerchants` throws `BudgetExceededError` when `currentMonthSpend + estimatedBatchCost > aiMonthlyCapCents`
+- [x] Input > 20 merchants: split into chunks of 20, separate SDK call per chunk, results concatenated (cap-checked between chunks)
+- [x] Income/spending pre-classified: when `isSpending = true`, prompt uses `SPENDING_CATEGORIES` from `src/lib/categories.ts`; else `INCOME_CATEGORIES`
+- [x] **CONSTRAINT-16 (privacy):** `buildCategorizationPrompt` output contains each provided `merchants[i]` AND the provided `categories.join(', ')` AND nothing else dynamic. Asserted by integration test denylist regex: `/\$\d|amountCents|accountId|account_id|\d{4}-\d{2}-\d{2}|ISO\s*date/i`. Same denylist asserted against captured SDK request body in SDK-mocked test.
+- [x] **CONSTRAINT-17 (response validation):** `parseLLMResponse` returns `null` for any value not in `allowedCategories` (no fuzzy matching, no normalization — strict equality). Validation failure logged LOUD with the rejected value, the merchant index, and the raw response.
+- [x] LLM API 429 surfaces as `AIRateLimitError` (typed) — propagated to caller
+- [x] LLM API 5xx/network surfaces as `AIUnavailableError` (typed) — propagated to caller
+- [x] JSON parse failure surfaces as `AIParseError` (typed, with raw text in context) — propagated to caller
+- [x] `incrementMonthCost` upsert happens AFTER successful SDK call, OUTSIDE any DB transaction (LLM latency must not hold a Postgres connection per architecture.md)
+- [x] Race-condition acknowledgment: two concurrent calls may both pass pre-check; soft cap accepted (single-user app; max ~$0.001 overshoot)
+- [x] Decrypted key used immediately in SDK constructor scope; not stored anywhere (SEC-01)
+- [x] SEC-01: API key never logged, never in error context
+- [x] CQ-01: each function < 50 lines
 
 **Tests required:**
 - `buildCategorizationPrompt` → contains each merchant string verbatim
