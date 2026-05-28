@@ -98,7 +98,7 @@
 | 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [x] |
 | 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
 | 87 | V1.1 Phase 2 — Review queue API | [x] |
-| 88 | V1.1 Phase 2 — Apply categorizations API | [ ] |
+| 88 | V1.1 Phase 2 — Apply categorizations API | [x] |
 | 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [ ] |
 | 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [ ] |
 | 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [ ] |
@@ -3179,15 +3179,15 @@ model AppSettings {
 - `POST /api/review/apply` → body `{ assignments: [...] }` → returns the function result
 
 **Acceptance criteria:**
-- [ ] Validates each `assignment.category ∈ ALL_CATEGORIES` (CONSTRAINT-17 echo at API boundary — defensive even though T83 enforces it upstream)
-- [ ] For each assignment: upsert `MerchantRule` on `normalizedMerchant` PK (create if new; update if exists) + UPDATE `Transaction` SET `category = assignment.category` WHERE `normalizeMerchant(merchant) = assignment.normalizedMerchant` AND `categoryOverridden = false`
-- [ ] Whole request wrapped in a single `prisma.$transaction` — atomic across all assignments; partial failure rolls back everything in the batch
-- [ ] `categoryOverridden` stays `false` on auto-applied transactions (user can still override per-transaction in Spending tab via T92)
-- [ ] When updating an existing rule: also UPDATE all matching transactions (retroactive — this is how T92's "Update rule and apply to all" path works)
-- [ ] EH-01: validation failures throw with structured context (which assignment, which field)
-- [ ] CONSTRAINT-13: `applyCategorizations` lives in `src/lib/review-apply.ts`, importable
-- [ ] CONSTRAINT-09 echo: upsert is the equivalent of "never blind INSERT" — MerchantRule PK guarantees no dupes
-- [ ] CQ-01: function < 50 lines (split per-assignment processing into a helper if needed)
+- [x] Validates each `assignment.category ∈ ALL_CATEGORIES` (CONSTRAINT-17 echo at API boundary — defensive even though T83 enforces it upstream)
+- [x] For each assignment: upsert `MerchantRule` on `normalizedMerchant` PK (create if new; update if exists) + UPDATE `Transaction` SET `category = assignment.category` WHERE `normalizeMerchant(merchant) = assignment.normalizedMerchant` AND `categoryOverridden = false`
+- [x] Whole request wrapped in a single `prisma.$transaction` — atomic across all assignments; partial failure rolls back everything in the batch
+- [x] `categoryOverridden` stays `false` on auto-applied transactions (user can still override per-transaction in Spending tab via T92)
+- [x] When updating an existing rule: also UPDATE all matching transactions (retroactive — this is how T92's "Update rule and apply to all" path works)
+- [x] EH-01: validation failures throw with structured context (which assignment, which field)
+- [x] CONSTRAINT-13: `applyCategorizations` lives in `src/lib/review-apply.ts`, importable
+- [x] CONSTRAINT-09 echo: upsert is the equivalent of "never blind INSERT" — MerchantRule PK guarantees no dupes
+- [x] CQ-01: function < 50 lines (split per-assignment processing into a helper if needed)
 
 **Tests required:**
 - `applyCategorizations` → single new assignment: rule created, matching transactions updated
