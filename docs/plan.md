@@ -97,7 +97,7 @@
 | 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [x] |
 | 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [x] |
 | 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
-| 87 | V1.1 Phase 2 — Review queue API | [ ] |
+| 87 | V1.1 Phase 2 — Review queue API | [x] |
 | 88 | V1.1 Phase 2 — Apply categorizations API | [ ] |
 | 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [ ] |
 | 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [ ] |
@@ -3141,15 +3141,15 @@ model AppSettings {
 - `GET /api/review/uncategorized` → returns the `getUncategorizedMerchants()` result
 
 **Acceptance criteria:**
-- [ ] Queries only transactions where `category = 'Uncategorized'` AND `categoryOverridden = false`
-- [ ] Grouping key is `normalizeMerchant(transaction.merchant)` (from T80) — done in application code (SQL would require porting the regex)
-- [ ] EXCLUDES transactions on accounts where `account.type ∈ {Investment, Crypto}` — those auto-categorize to Transfer Out at sync time per T81, so they should never reach Review. (Defense-in-depth: if T81 missed any historical row, this query still filters them out.)
-- [ ] Each result row: `displayMerchant` (most-recent transaction's `displayMerchant(merchant)`), `transactionCount`, `sampleDescription` (one raw `merchant` string for user context)
-- [ ] Sorted by `transactionCount` desc (largest groupings first — user clears the most-impactful merchants in fewest decisions)
-- [ ] `isSpending` derived: `true` if the majority (or all) sample transactions have `amountCents < 0`; else `false`. Used downstream by T83 to pick SPENDING vs INCOME categories.
-- [ ] CONSTRAINT-13: `getUncategorizedMerchants` and `getReviewBadgeCount` live in `src/lib/review-queries.ts`, importable from tests and from T89/T90 server components
-- [ ] EH-01: query failures thrown LOUD with context
-- [ ] CQ-01: each function < 50 lines
+- [x] Queries only transactions where `category = 'Uncategorized'` AND `categoryOverridden = false`
+- [x] Grouping key is `normalizeMerchant(transaction.merchant)` (from T80) — done in application code (SQL would require porting the regex)
+- [x] EXCLUDES transactions on accounts where `account.type ∈ {Investment, Crypto}` — those auto-categorize to Transfer Out at sync time per T81, so they should never reach Review. (Defense-in-depth: if T81 missed any historical row, this query still filters them out.)
+- [x] Each result row: `displayMerchant` (most-recent transaction's `displayMerchant(merchant)`), `transactionCount`, `sampleDescription` (one raw `merchant` string for user context)
+- [x] Sorted by `transactionCount` desc (largest groupings first — user clears the most-impactful merchants in fewest decisions)
+- [x] `isSpending` derived: `true` if the majority (or all) sample transactions have `amountCents < 0`; else `false`. Used downstream by T83 to pick SPENDING vs INCOME categories.
+- [x] CONSTRAINT-13: `getUncategorizedMerchants` and `getReviewBadgeCount` live in `src/lib/review-queries.ts`, importable from tests and from T89/T90 server components
+- [x] EH-01: query failures thrown LOUD with context
+- [x] CQ-01: each function < 50 lines
 
 **Tests required:**
 - `getUncategorizedMerchants` → groups duplicates by normalized form (mock DB with 3 transactions on 2 distinct normalized merchants → returns 2 rows)
