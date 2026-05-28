@@ -96,7 +96,7 @@
 | 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [x] |
 | 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [x] |
 | 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [x] |
-| 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
+| 86 | V1.1 Phase 2 — Backfill API + orchestrator | [x] |
 | 87 | V1.1 Phase 2 — Review queue API | [x] |
 | 88 | V1.1 Phase 2 — Apply categorizations API | [x] |
 | 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [ ] |
@@ -3104,16 +3104,18 @@ model AppSettings {
 - `async function runBackfillCategorization(syncLogId: string): Promise<void>` — queries distinct uncategorized normalizedMerchants (using `getUncategorizedMerchants` from T87 review-queries), chunks into 20-per-batch, calls `categorizeMerchants` per chunk, applies via `applyCategorizations` from T88 review-apply, writes progress + final status to SyncLog
 
 **Acceptance criteria:**
-- [ ] POST creates a SyncLog row (type: `'backfill_categorization'`), returns syncLogId immediately without awaiting the run (matches existing `runFullSync` fire-and-forget pattern from `src/lib/sync.ts`)
-- [ ] Pre-flight estimate: count distinct uncategorized merchants × `estimateBatchCost(chunkCount)` returned in response so the UI can show "~$0.00X" before confirming
-- [ ] POST requires `body.confirmed = true` (defensive — UI should never POST without the user clicking confirm in T85's button + modal)
-- [ ] Orchestrator processes in chunks of 20; cost check between chunks via `isAIAvailable()`
-- [ ] If `BudgetExceededError` thrown mid-run: stop further chunks; SyncLog.errors records `{ stopped: 'AT_CAP', chunksCompleted: N }`; partial results that already landed remain
-- [ ] Per-chunk write atomicity: `applyCategorizations` runs inside `prisma.$transaction` (T88 enforces this) — if a chunk fails, that chunk's rules + transaction updates roll back together
-- [ ] All errors per chunk logged to SyncLog.errors (JSON), don't abort the whole run unless cost cap hit
-- [ ] EH-01: all errors thrown LOUD with what + where + why (chunk index, merchant count, error class)
-- [ ] CONSTRAINT-09 echo: never blind INSERT — `applyCategorizations` upserts MerchantRule on PK
-- [ ] CQ-01: orchestrator function < 50 lines (split chunk-processing into a helper)
+- [x] POST creates a SyncLog row (type: `'backfill_categorization'`), returns syncLogId immediately without awaiting the run (matches existing `runFullSync` fire-and-forget pattern from `src/lib/sync.ts`)
+- [x] Pre-flight estimate: count distinct uncategorized merchants × `estimateBatchCost(chunkCount)` returned in response so the UI can show "~$0.00X" before confirming
+- [x] POST requires `body.confirmed = true` (defensive — UI should never POST without the user clicking confirm in T85's button + modal)
+- [x] Orchestrator processes in chunks of 20; cost check between chunks via `isAIAvailable()`
+- [x] If `BudgetExceededError` thrown mid-run: stop further chunks; SyncLog.errors records `{ stopped: 'AT_CAP', chunksCompleted: N }`; partial results that already landed remain
+- [x] Per-chunk write atomicity: `applyCategorizations` runs inside `prisma.$transaction` (T88 enforces this) — if a chunk fails, that chunk's rules + transaction updates roll back together
+- [x] All errors per chunk logged to SyncLog.errors (JSON), don't abort the whole run unless cost cap hit
+- [x] EH-01: all errors thrown LOUD with what + where + why (chunk index, merchant count, error class)
+- [x] CONSTRAINT-09 echo: never blind INSERT — `applyCategorizations` upserts MerchantRule on PK
+- [x] CQ-01: orchestrator function < 50 lines (split chunk-processing into a helper)
+
+> **As-built deviation (Session 36, 2026-05-28, builder-approved Option A):** the `SyncLog` model has NO `type` or `merchantsProcessed` column (T79 never added them; not in architecture.md's migration list). Rather than migrate, backfill run-metadata (`kind: 'backfill_categorization'`, `merchantsProcessed`, `chunksCompleted`, `chunksTotal`, `stopped`, `chunkErrors[]`) is stored inside the existing `SyncLog.errors` (Json?) field; `status` reuses the real `SyncStatus` enum (`running`→`success`/`partial`/`failed`); `merchantsProcessed` is mirrored onto `transactionsUpdated` so `GET /api/sync/status` surfaces it. `estimateBatchCost` takes a merchant count (not a chunk count). Reversible later via a one-line field rename if desired. No schema/migration change made.
 
 **Tests required:**
 - `POST /api/settings/ai/backfill` → without `confirmed: true` → 400 error
