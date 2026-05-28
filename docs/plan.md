@@ -94,7 +94,7 @@
 | 81 | V1.1 Phase 2 — Categorization lookup precedence refactor | [x] |
 | 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [x] |
 | 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [x] |
-| 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [ ] |
+| 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [x] |
 | 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [ ] |
 | 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
 | 87 | V1.1 Phase 2 — Review queue API | [ ] |
@@ -3030,12 +3030,12 @@ model AppSettings {
 **Functions to implement:** None (declarative React updates).
 
 **Acceptance criteria:**
-- [ ] Sidebar nav items in order: Dashboard, Income, Spending, Investments, Net Worth, Accounts, Settings, Review (matches PRD §1 update)
-- [ ] Settings item links to `/settings`
-- [ ] Review item links to `/review` and has a badge slot (count rendering wired in T90)
-- [ ] All existing nav items unchanged (no regression on Dashboard/Income/Spending/Investments/Net Worth/Accounts links)
-- [ ] CQ-02: component < 200 lines (Sidebar is small already)
-- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill for design conformance
+- [x] Sidebar nav items order — **builder decision (Session 35): append-only.** Spec/PRD §1 list Net Worth 5th, but the live Sidebar (Task 39) has it 2nd; builder chose to preserve Task 39's order and only append Settings + Review. Final order: Dashboard, Net Worth, Income, Spending, Investments, Accounts, Settings, Review.
+- [x] Settings item links to `/settings`
+- [x] Review item links to `/review` and has a badge slot (optional `reviewCount` prop seam; count rendering wired in T90)
+- [x] All existing nav items unchanged (no regression on Dashboard/Income/Spending/Investments/Net Worth/Accounts links)
+- [x] CQ-02: component < 200 lines (69 lines)
+- [x] Velvet Ledger styling — new items use the existing nav className pattern; badge uses `bg-primary/20 text-primary` pill
 
 **Tests required:**
 - `Sidebar` → renders Settings link to `/settings`

@@ -9,6 +9,8 @@ import {
   TrendingUp,
   Wallet,
   Building2,
+  Settings,
+  ListChecks,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -20,9 +22,17 @@ const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Spending", href: "/spending", icon: ShoppingCart },
   { label: "Investments", href: "/investments", icon: TrendingUp },
   { label: "Accounts", href: "/accounts", icon: Building2 },
+  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Review", href: "/review", icon: ListChecks },
 ]
 
-export function Sidebar() {
+/**
+ * Left nav. `reviewCount` is an optional seam (T84): when > 0 a small pill
+ * renders next to the "Review" item. The actual count is wired in T90 —
+ * this component does no fetching of its own. Hidden when 0/undefined
+ * (PRD §1), so an absent count never affects layout.
+ */
+export function Sidebar({ reviewCount }: { reviewCount?: number }) {
   const pathname = usePathname()
 
   return (
@@ -49,6 +59,11 @@ export function Sidebar() {
             >
               <Icon size={18} />
               {item.label}
+              {item.href === "/review" && reviewCount && reviewCount > 0 ? (
+                <span className="ml-auto font-inter font-medium text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+                  {reviewCount}
+                </span>
+              ) : null}
             </Link>
           )
         })}
