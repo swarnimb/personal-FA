@@ -95,7 +95,7 @@
 | 82 | V1.1 Phase 2 — Anthropic SDK + `src/lib/anthropic.ts` foundation | [x] |
 | 83 | V1.1 Phase 2 — `categorizeMerchants` + CONSTRAINT-16/17 enforcement | [x] |
 | 84 | V1.1 Phase 2 — Sidebar nav (Settings + Review items) | [x] |
-| 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [ ] |
+| 85 | V1.1 Phase 2 — Settings page + AISettingsForm + AI settings APIs | [x] |
 | 86 | V1.1 Phase 2 — Backfill API + orchestrator | [ ] |
 | 87 | V1.1 Phase 2 — Review queue API | [ ] |
 | 88 | V1.1 Phase 2 — Apply categorizations API | [ ] |
@@ -3063,17 +3063,17 @@ model AppSettings {
 - `DELETE /api/settings/ai` → clears `aiEncryptedApiKey` / `aiIv` / `aiAuthTag` and sets `aiEnabled = false`. Returns updated GET shape. Idempotent.
 
 **Acceptance criteria:**
-- [ ] Settings page renders server-side fetching AppSettings + current LLMCost
-- [ ] AISettingsForm displays: enabled toggle (disabled-look + tooltip when no key set), masked API-key input ("Key set (••••)" if hasKey else placeholder), monthly cap input (in dollars, converts to cents on save), current-month spend display ("$X.XX of $Y.YY"), "Categorize existing transactions with AI" button (wired in T86)
-- [ ] Toggle to enabled when consentAcknowledged = false → ConsentModal opens; modal requires explicit "I understand merchant strings will be sent to Anthropic" checkbox before Enable button activates; on Enable, POST sets both `enabled = true` AND `consentAcknowledged = true`
-- [ ] CONSTRAINT-06 + SEC-06: API key encrypted via `encrypt()` from `src/lib/crypto.ts` (AES-256-GCM) before write to `aiEncryptedApiKey`
-- [ ] SEC-01: API key never returned in any GET response; never logged anywhere; never appears in any error message (including parse/validation errors)
-- [ ] DELETE clears key columns + disables AI; idempotent (deleting again is a no-op success)
-- [ ] Monthly cap input validation: integer, 100 ≤ value ≤ 100000 ($1 to $1000); rejects with structured error otherwise
-- [ ] First-time consent: AISettingsForm checks `consentAcknowledged` from GET; if false and user attempts to enable, ConsentModal mounts before the POST fires
-- [ ] EH-01: validation failures throw with structured context (which field, why invalid)
-- [ ] CQ-02: page < 200 lines, AISettingsForm < 200 lines, ConsentModal < 200 lines
-- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
+- [x] Settings page renders server-side fetching AppSettings + current LLMCost
+- [x] AISettingsForm displays: enabled toggle (disabled-look + tooltip when no key set), masked API-key input ("Key set (••••)" if hasKey else placeholder), monthly cap input (in dollars, converts to cents on save), current-month spend display ("$X.XX of $Y.YY"), "Categorize existing transactions with AI" button (wired in T86)
+- [x] Toggle to enabled when consentAcknowledged = false → ConsentModal opens; modal requires explicit "I understand merchant strings will be sent to Anthropic" checkbox before Enable button activates; on Enable, POST sets both `enabled = true` AND `consentAcknowledged = true`
+- [x] CONSTRAINT-06 + SEC-06: API key encrypted via `encrypt()` from `src/lib/crypto.ts` (AES-256-GCM) before write to `aiEncryptedApiKey`
+- [x] SEC-01: API key never returned in any GET response; never logged anywhere; never appears in any error message (including parse/validation errors)
+- [x] DELETE clears key columns + disables AI; idempotent (deleting again is a no-op success)
+- [x] Monthly cap input validation: integer, 100 ≤ value ≤ 100000 ($1 to $1000); rejects with structured error otherwise
+- [x] First-time consent: AISettingsForm checks `consentAcknowledged` from GET; if false and user attempts to enable, ConsentModal mounts before the POST fires
+- [x] EH-01: validation failures throw with structured context (which field, why invalid)
+- [x] CQ-02: page < 200 lines (48), AISettingsForm < 200 lines (194), ConsentModal < 200 lines (91)
+- [x] Velvet Ledger styling — invoke `@ui-amibroke` skill
 
 **Tests required:**
 - `GET /api/settings/ai` → response shape includes hasKey but never apiKey/encrypted fields
