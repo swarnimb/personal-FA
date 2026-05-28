@@ -357,3 +357,19 @@
 **Check before approving:** These constraints add real friction for future LLM features. A V2 "summarize my spending" feature would need a separate module with its own consent disclosure (it cannot use the categorization pipeline). A V2 "natural-language transaction search" feature would need its own response-validation contract since open-ended text doesn't fit the constrained-list pattern. Is that the level of friction you want for future LLM features that touch financial data? My recommendation: yes — financial-data LLM use cases deserve explicit per-feature design.
 
 **What this closes off:** Quick "let's throw transaction data at Claude and see what it says" prototyping inside the existing categorization module. Every LLM use case in this app now requires: an explicit prompt-shape contract (CONSTRAINT-16 denylist applies), an explicit response-validation contract (CONSTRAINT-17 allowed-values or alternative), and per-feature consent if user data is involved. Intentional friction.
+
+---
+
+## FB-23: Backfill run-metadata stored in the existing SyncLog JSON field (no new columns)
+
+**Date:** 2026-05-28
+**Architecture section:** `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2) → Backfill orchestrator
+**Plan reference:** T86 in `docs/plan.md`
+
+**Decided:** The AI backfill records its progress — how many merchants it categorized, which 20-merchant chunks finished, any per-chunk errors, and whether it stopped at the monthly cost cap — inside the `SyncLog` table's existing `errors` JSON field, under a `kind: 'backfill_categorization'` marker. It reuses the existing `SyncStatus` values (running / success / partial / failed) and mirrors the processed count onto the existing `transactionsUpdated` column. No new database columns were added; no migration was run. (The T86 plan task originally assumed a `SyncLog.type` and `merchantsProcessed` column, but those never existed — T79 didn't add them.)
+
+**Means for your product:** The backfill works today with zero database migration, and the Settings page polls its progress through exactly the same `GET /api/sync/status` endpoint the regular bank-sync already uses. Nothing you or a user sees is affected — this is pure internal bookkeeping.
+
+**Check before approving:** Just confirm you're comfortable that a field literally named `errors` now also holds normal (non-error) progress data. If that ever feels untidy, it's a one-line rename to a `detail`/`metadata` field later — fully reversible.
+
+**What this closes off:** Nothing meaningful. If we ever needed to query past backfills by type (we don't, for a single-user app), we could add proper columns then. No door is closed.
