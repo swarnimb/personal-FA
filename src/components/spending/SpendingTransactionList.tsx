@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ALL_CATEGORIES } from '@/lib/categories'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { AddTransactionModal } from '@/components/transactions/AddTransactionModal'
+import { UpdateRulePrompt } from '@/components/spending/UpdateRulePrompt'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
 
@@ -20,6 +21,14 @@ type Transaction = {
 
 type Account = { id: string; name: string }
 
+// Pending edit awaiting the user's UpdateRulePrompt choice (T92).
+type PendingRuleEdit = {
+  txId: string
+  merchant: string
+  ruleCategory: string
+  newCategory: string
+}
+
 const SELECTABLE_CATEGORIES = ALL_CATEGORIES.filter((c) => c !== 'Uncategorized')
 
 class CategoryPatchError extends Error {
@@ -29,16 +38,36 @@ class CategoryPatchError extends Error {
   }
 }
 
-async function patchCategory(id: string, category: string): Promise<void> {
+/**
+ * PATCH a transaction's category. `updateRule=true` (T92 "Yes") additionally
+ * upserts the merchant rule and retroactively re-categorizes all matching
+ * transactions; omitted/false changes only this transaction.
+ */
+async function patchCategory(id: string, category: string, updateRule?: boolean): Promise<void> {
   const res = await fetch(`/api/transactions/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category }),
+    body: JSON.stringify(updateRule ? { category, updateRule: true } : { category }),
   })
   if (!res.ok) {
     const data = await res.json()
     throw new CategoryPatchError(data.error ?? 'Unknown error')
   }
+}
+
+/**
+ * Look up the existing MerchantRule (if any) for a raw merchant string. Returns
+ * the rule's category, or `null` when no rule exists. Normalization happens
+ * server-side. Throws LOUD on a non-OK response (EH-01).
+ */
+async function fetchRuleCategory(merchant: string): Promise<string | null> {
+  const res = await fetch(`/api/merchant-rules?merchant=${encodeURIComponent(merchant)}`)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new CategoryPatchError(data.error ?? `Rule lookup failed for "${merchant}"`)
+  }
+  const { data } = await res.json()
+  return data?.rule?.category ?? null
 }
 
 /**
@@ -55,6 +84,8 @@ export function SpendingTransactionList({
   const router = useRouter()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [patchError, setPatchError] = useState<string | null>(null)
+  const [pendingEdit, setPendingEdit] = useState<PendingRuleEdit | null>(null)
+  const [isApplying, setIsApplying] = useState(false)
   const toast = useToast()
 
   const sorted = [...transactions].sort(
@@ -70,7 +101,16 @@ export function SpendingTransactionList({
       setPatchError(null)
       return
     }
+    const tx = transactions.find((t) => t.id === txId)
     try {
+      // T92: if a rule already exists for this merchant AND the chosen category
+      // differs from it, prompt the user instead of writing immediately.
+      const ruleCategory = tx ? await fetchRuleCategory(tx.merchant) : null
+      if (ruleCategory && ruleCategory !== category) {
+        setPendingEdit({ txId, merchant: tx!.merchant, ruleCategory, newCategory: category })
+        setPatchError(null)
+        return
+      }
       await patchCategory(txId, category)
       setEditingId(null)
       setPatchError(null)
@@ -80,7 +120,39 @@ export function SpendingTransactionList({
     }
   }
 
+  // UpdateRulePrompt choices (T92). Yes → update rule + retroactive apply;
+  // No → single-transaction override; Cancel → discard the edit, no write.
+  const resolvePendingEdit = async (updateRule: boolean) => {
+    if (!pendingEdit) return
+    setIsApplying(true)
+    try {
+      await patchCategory(pendingEdit.txId, pendingEdit.newCategory, updateRule)
+      setPendingEdit(null)
+      setEditingId(null)
+      setPatchError(null)
+      router.refresh()
+    } catch (err) {
+      setPendingEdit(null)
+      setPatchError(err instanceof Error ? err.message : 'Update failed')
+    } finally {
+      setIsApplying(false)
+    }
+  }
+
   return (
+    <>
+    {pendingEdit && (
+      <UpdateRulePrompt
+        open={pendingEdit !== null}
+        merchant={pendingEdit.merchant}
+        ruleCategory={pendingEdit.ruleCategory}
+        newCategory={pendingEdit.newCategory}
+        onYes={() => resolvePendingEdit(true)}
+        onNo={() => resolvePendingEdit(false)}
+        onCancel={() => { setPendingEdit(null); setEditingId(null) }}
+        isSubmitting={isApplying}
+      />
+    )}
     <div className="bg-surface-low rounded-xl overflow-hidden flex flex-col h-[900px]">
       <div className="px-6 py-4 flex items-center justify-between gap-3 flex-shrink-0">
         <h3 className="font-manrope font-semibold text-base text-on-surface">Recent Transactions</h3>
@@ -170,5 +242,6 @@ export function SpendingTransactionList({
         </>
       )}
     </div>
+    </>
   )
 }

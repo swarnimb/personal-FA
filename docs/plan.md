@@ -3316,24 +3316,27 @@ model AppSettings {
 
 ## Task 92: V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on category edit
 
-**Files:**
-- `src/app/(main)/spending/TransactionRow.tsx` — modify (or wherever inline category edit lives today)
-- `src/app/(main)/spending/UpdateRulePrompt.tsx` — create (modal/dialog)
-- `src/app/api/transactions/[id]/category/route.ts` — modify (accept `updateRule: boolean` flag in PATCH body)
-- `src/__tests__/integration/spending-edit-with-rule.integration.test.ts` — create
+**Files:** _(actual paths — plan's guesses didn't exist; corrected inline per convention)_
+- `src/components/spending/SpendingTransactionList.tsx` — modified (real inline category-edit UI; `TransactionRow.tsx` does not exist)
+- `src/components/spending/UpdateRulePrompt.tsx` — created (modal/dialog, reuses existing `Dialog`/`Button`)
+- `src/app/api/transactions/[id]/route.ts` — modified (real category PATCH route; no `/category` sub-route exists). Accepts `updateRule?: boolean`.
+- `src/app/api/merchant-rules/route.ts` — created (`GET ?merchant=<raw>` rule lookup; normalization stays server-side)
+- `src/__tests__/integration/spending-edit-with-rule.integration.test.ts` — created (7 tests)
+- `src/__tests__/components/spending-edit-rule-prompt.test.tsx` — created (6 tests)
 
 **Functions to implement:**
 - (Extends existing transaction-category PATCH route to also handle rule-update path.)
 
 **Acceptance criteria:**
-- [ ] When user edits a transaction's category inline on the Spending tab, check (via API) if a `MerchantRule` exists for `normalizeMerchant(transaction.merchant)`
-- [ ] If rule exists AND new category != rule.category → mount `UpdateRulePrompt` with options: **Yes** (update the rule and apply retroactively to all transactions with this normalized merchant where `categoryOverridden = false`), **No** (update only this transaction; sets `categoryOverridden = true`), **Cancel** (no change)
-- [ ] If rule doesn't exist OR new category matches existing rule → no prompt; behave as today (update single transaction; set `categoryOverridden = true` if changed)
-- [ ] PATCH `/api/transactions/[id]/category` body now accepts `{ category: string, updateRule?: boolean }`. When `updateRule: true`: upsert MerchantRule + UPDATE all matching transactions (source = USER). When `updateRule: false` or omitted: update single transaction only.
-- [ ] CONSTRAINT-17 echo: validates `category ∈ ALL_CATEGORIES` at the route boundary
-- [ ] EH-01: all errors thrown LOUD with context
-- [ ] CQ-02: UpdateRulePrompt < 200 lines
-- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
+- [x] When user edits a transaction's category inline on the Spending tab, check (via API) if a `MerchantRule` exists for `normalizeMerchant(transaction.merchant)` _(via new `GET /api/merchant-rules`)_
+- [x] If rule exists AND new category != rule.category → mount `UpdateRulePrompt` with options: **Yes** (update the rule and apply retroactively to all transactions with this normalized merchant where `categoryOverridden = false`), **No** (update only this transaction; sets `categoryOverridden = true`), **Cancel** (no change)
+- [x] If rule doesn't exist OR new category matches existing rule → no prompt; behave as today (update single transaction; set `categoryOverridden = true` if changed)
+- [x] PATCH `/api/transactions/[id]` body now accepts `{ category: string, updateRule?: boolean }`. When `updateRule: true`: upsert MerchantRule + UPDATE all matching transactions (source = USER) via shared `applyCategorizations`. When `updateRule: false` or omitted: update single transaction only.
+- [x] CONSTRAINT-17 echo: validates `category ∈ ALL_CATEGORIES` at the route boundary (before any write)
+- [x] EH-01: all errors thrown LOUD with context
+- [x] CQ-02: UpdateRulePrompt < 200 lines _(75 lines)_
+- [x] Velvet Ledger styling — `@ui-amibroke` (reused `Dialog`/`Button` primitives, glassmorphism)
+- [~] _NOTE: "Yes" reuses `applyCategorizations`, which skips `categoryOverridden=true` rows — so re-editing an already-overridden row + Yes updates the rule but not that specific row. Matches the spec's "where categoryOverridden=false" wording; flagged as a possible follow-up if the edited row should always force-update._
 
 **Tests required:**
 - Edit category on transaction whose merchant has NO existing MerchantRule → no prompt, single-transaction update succeeds
