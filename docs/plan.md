@@ -100,7 +100,7 @@
 | 87 | V1.1 Phase 2 — Review queue API | [x] |
 | 88 | V1.1 Phase 2 — Apply categorizations API | [x] |
 | 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [x] |
-| 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [ ] |
+| 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [x] |
 | 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [ ] |
 | 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [ ] |
 | 93 | V1.1 Phase 2 — SECURITY.md AI Categorization section | [ ] |
@@ -3260,14 +3260,14 @@ model AppSettings {
 **Functions to implement:** None (uses `getReviewBadgeCount` from T87).
 
 **Acceptance criteria:**
-- [ ] CategorizationReviewBanner mounts on Dashboard ONLY when `merchantCount > 0`
-- [ ] Banner text: "N transactions / K merchants need categorization review →"
-- [ ] Banner click → navigates to `/review`
-- [ ] Banner visual treatment mirrors `AccountReviewBanner` (consistency with Phase 1)
-- [ ] Sidebar Review item shows badge with `merchantCount` (hidden when 0)
-- [ ] Both surfaces use `getReviewBadgeCount` from `src/lib/review-queries.ts` (T87) — single source of truth, no duplicated counting logic
-- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
-- [ ] CQ-02: banner component < 200 lines
+- [x] CategorizationReviewBanner mounts on Dashboard ONLY when `merchantCount > 0`
+- [x] Banner text: "N transactions / K merchants need categorization review →"
+- [x] Banner click → navigates to `/review`
+- [x] Banner visual treatment mirrors `AccountReviewBanner` (consistency with Phase 1)
+- [x] Sidebar Review item shows badge with `merchantCount` (hidden when 0)
+- [x] Both surfaces use `getReviewBadgeCount` from `src/lib/review-queries.ts` (T87) — single source of truth, no duplicated counting logic
+- [x] Velvet Ledger styling — invoke `@ui-amibroke` skill
+- [x] CQ-02: banner component < 200 lines
 
 **Tests required:**
 - `CategorizationReviewBanner` → renders when `merchantCount > 0`
