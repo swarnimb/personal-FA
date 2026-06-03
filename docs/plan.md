@@ -99,7 +99,7 @@
 | 86 | V1.1 Phase 2 — Backfill API + orchestrator | [x] |
 | 87 | V1.1 Phase 2 — Review queue API | [x] |
 | 88 | V1.1 Phase 2 — Apply categorizations API | [x] |
-| 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [ ] |
+| 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [x] |
 | 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [ ] |
 | 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [ ] |
 | 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [ ] |
@@ -3220,19 +3220,19 @@ model AppSettings {
 - `POST /api/review/prefill` → body `{ normalizedMerchants: string[] }` → returns `Array<{ normalizedMerchant: string; suggestedCategory: string | null }>`. Calls `categorizeMerchants` (T83); maps result back. Handles AI-error classes by returning structured error response.
 
 **Acceptance criteria:**
-- [ ] Page renders uncategorized merchants from `GET /api/review/uncategorized` (T87)
-- [ ] Each row: `displayMerchant`, transaction count, sample raw description, `CategoryDropdown` (empty initially)
-- [ ] Sorted by transactionCount desc (matches API order)
-- [ ] `PrefillButton` shows ONLY when `isAIAvailable()` returns enabled; copy: "Pre-fill K merchants with AI (~$0.00X)" with K = current row count, $ from `estimateBatchCost`
-- [ ] Click `PrefillButton` → POST `/api/review/prefill` with all current normalized merchants → response fills each row's dropdown with the suggested category → "AI" badge appears on those rows
-- [ ] User changes a dropdown value → row's "AI" badge becomes "Edited" badge (visual indicator that it diverges from AI suggestion)
-- [ ] "Apply all" button writes via POST `/api/review/apply` (T88) with each row's source = `'AI'` (unchanged from suggestion) or `'USER'` (edited or hand-filled)
-- [ ] After successful Apply all: rows disappear from the table (re-fetch from API), success toast
-- [ ] If AI off (no key, at cap, disabled): PrefillButton hidden; ReviewTable still fully functional for manual categorization
-- [ ] `PrivacyBanner` persistent footer when AI is on: "AI suggestions are sent to Anthropic — merchant strings only"
-- [ ] CONSTRAINT-17 enforcement at UI: dropdown options sourced from `ALL_CATEGORIES` in `src/lib/categories.ts` — user can't pick a category not in the canonical list
-- [ ] Velvet Ledger styling — invoke `@ui-amibroke` skill
-- [ ] CQ-02: each component < 200 lines
+- [x] Page renders uncategorized merchants from `GET /api/review/uncategorized` (T87)
+- [x] Each row: `displayMerchant`, transaction count, sample raw description, `CategoryDropdown` (empty initially)
+- [x] Sorted by transactionCount desc (matches API order)
+- [x] `PrefillButton` shows ONLY when `isAIAvailable()` returns enabled; copy: "Pre-fill K merchants with AI (~$0.00X)" with K = current row count, $ from `estimateBatchCost`
+- [x] Click `PrefillButton` → POST `/api/review/prefill` with all current normalized merchants → response fills each row's dropdown with the suggested category → "AI" badge appears on those rows
+- [x] User changes a dropdown value → row's "AI" badge becomes "Edited" badge (visual indicator that it diverges from AI suggestion)
+- [x] "Apply all" button writes via POST `/api/review/apply` (T88) with each row's source = `'AI'` (unchanged from suggestion) or `'USER'` (edited or hand-filled)
+- [x] After successful Apply all: rows disappear from the table (re-fetch from API), success toast
+- [x] If AI off (no key, at cap, disabled): PrefillButton hidden; ReviewTable still fully functional for manual categorization
+- [x] `PrivacyBanner` persistent footer when AI is on: "AI suggestions are sent to Anthropic — merchant strings only"
+- [x] CONSTRAINT-17 enforcement at UI: dropdown options sourced from `ALL_CATEGORIES` in `src/lib/categories.ts` — user can't pick a category not in the canonical list
+- [x] Velvet Ledger styling — invoke `@ui-amibroke` skill
+- [x] CQ-02: each component < 200 lines
 
 **Tests required:**
 - `ReviewTable` → renders rows from mock API response
