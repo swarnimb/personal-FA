@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/ToastProvider'
+import { AIStatusBanner, isNonRecoverable } from './AIStatusBanner'
 import { PrefillButton } from './PrefillButton'
 import { PrivacyBanner } from './PrivacyBanner'
 import { ReviewRow } from './ReviewRow'
@@ -12,6 +13,7 @@ import {
   fetchPrefill,
   initialRows,
   postApply,
+  PrefillError,
   refetchMerchants,
   rowAfterChange,
   type ReviewMerchant,
@@ -32,31 +34,39 @@ const COLUMNS = ['Merchant', 'Transactions', 'Sample', 'Category'] as const
  *
  * @param merchants uncategorized merchant groupings (T87 order: count desc).
  * @param aiEnabled whether `isAIAvailable()` reported the feature enabled.
+ * @param monthlyCapCents the AI monthly cap in cents (for the budget banner), or
+ *   null when unknown (settings unset / demo) — the banner then omits the figure.
  */
 export function ReviewTable({
   merchants,
   aiEnabled,
+  monthlyCapCents,
 }: {
   merchants: ReviewMerchant[]
   aiEnabled: boolean
+  monthlyCapCents?: number | null
 }) {
   const toast = useToast()
   const [rows, setRows] = useState<ReviewMerchant[]>(merchants)
   const [state, setState] = useState<Map<string, RowState>>(() => initialRows(merchants))
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errorClass, setErrorClass] = useState<string | null>(null)
 
   const handleChange = (key: string, category: string) =>
     setState((prev) => new Map(prev).set(key, rowAfterChange(prev.get(key), category)))
 
   const handlePrefill = async () => {
     setBusy(true)
-    setError(null)
+    setErrorClass(null)
     try {
       const suggestions = await fetchPrefill(rows.map((m) => m.normalizedMerchant))
       setState((prev) => applySuggestions(prev, suggestions))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI prefill failed')
+      // LOUD (EH-01): log the class + message for diagnosis; the banner shows the
+      // user-facing copy + manual fallback.
+      const cls = err instanceof PrefillError ? err.errorClass : 'UnknownError'
+      console.error(`AI prefill failed (${cls}):`, err)
+      setErrorClass(cls)
     } finally {
       setBusy(false)
     }
@@ -65,11 +75,10 @@ export function ReviewTable({
   const handleApplyAll = async () => {
     const assignments = buildAssignments(rows, state)
     if (assignments.length === 0) {
-      setError('Choose a category for at least one merchant before applying.')
+      toast.show('Choose a category for at least one merchant before applying.')
       return
     }
     setBusy(true)
-    setError(null)
     try {
       await postApply(assignments)
       const remaining = await refetchMerchants()
@@ -77,7 +86,8 @@ export function ReviewTable({
       setState(initialRows(remaining))
       toast.show(APPLY_SUCCESS_COPY)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Apply failed')
+      console.error('Apply all failed:', err)
+      toast.show(err instanceof Error ? err.message : 'Apply failed')
     } finally {
       setBusy(false)
     }
@@ -89,7 +99,12 @@ export function ReviewTable({
         <h1 className="font-manrope font-bold text-2xl text-on-surface">Review</h1>
         <div className="flex items-center gap-3">
           {aiEnabled && (
-            <PrefillButton merchantCount={rows.length} onPrefill={handlePrefill} busy={busy} />
+            <PrefillButton
+              merchantCount={rows.length}
+              onPrefill={handlePrefill}
+              busy={busy}
+              blocked={isNonRecoverable(errorClass)}
+            />
           )}
           <Button size="sm" onClick={handleApplyAll} disabled={busy || rows.length === 0}>
             Apply all
@@ -97,7 +112,7 @@ export function ReviewTable({
         </div>
       </div>
 
-      {error && <p className="font-inter text-xs text-tertiary">{error}</p>}
+      <AIStatusBanner errorClass={errorClass} monthlyCapCents={monthlyCapCents} />
 
       <div className="bg-surface-low rounded-xl overflow-hidden">
         {rows.length === 0 ? (

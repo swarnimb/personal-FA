@@ -40,10 +40,16 @@ const MERCHANTS: ReviewMerchant[] = [
   },
 ]
 
-function renderTable(props: { merchants?: ReviewMerchant[]; aiEnabled?: boolean } = {}) {
+function renderTable(
+  props: { merchants?: ReviewMerchant[]; aiEnabled?: boolean; monthlyCapCents?: number | null } = {},
+) {
   return render(
     <ToastProvider>
-      <ReviewTable merchants={props.merchants ?? MERCHANTS} aiEnabled={props.aiEnabled ?? false} />
+      <ReviewTable
+        merchants={props.merchants ?? MERCHANTS}
+        aiEnabled={props.aiEnabled ?? false}
+        monthlyCapCents={props.monthlyCapCents ?? null}
+      />
     </ToastProvider>,
   )
 }
@@ -97,11 +103,16 @@ describe('ReviewTable rendering', () => {
   })
 
   it('surfaces a structured prefill error without crashing (error case)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
         ok: false,
-        json: async () => ({ error: 'AI service temporarily unavailable.' }),
+        status: 503,
+        json: async () => ({
+          errorClass: 'AIUnavailableError',
+          error: 'AI service temporarily unavailable.',
+        }),
       })) as unknown as typeof fetch,
     )
     renderTable({ aiEnabled: true })
@@ -111,6 +122,83 @@ describe('ReviewTable rendering', () => {
     })
     // Rows remain interactive (manual fallback still works).
     expect(screen.getByText('Starbucks #1234')).toBeInTheDocument()
+  })
+
+  it('shows the rate-limit banner copy when prefill returns 429 (T91)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 429,
+        json: async () => ({
+          errorClass: 'AIRateLimitError',
+          error: 'rate limited',
+        }),
+      })) as unknown as typeof fetch,
+    )
+    renderTable({ aiEnabled: true })
+    await userEvent.click(screen.getByRole('button', { name: /pre-fill merchants with ai/i }))
+    await waitFor(() => {
+      expect(screen.getByText(/temporarily rate-limited/i)).toBeInTheDocument()
+    })
+    // Recoverable error: the Pre-fill button stays enabled for a retry.
+    expect(screen.getByRole('button', { name: /pre-fill merchants with ai/i })).not.toBeDisabled()
+  })
+
+  it('runs the Apply-all success path after categories are filled (T91 manual fallback)', async () => {
+    // Route each endpoint: prefill fills categories, apply succeeds, refetch empties.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/review/prefill') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [
+              { normalizedMerchant: 'starbucks', suggestedCategory: 'Dining & Bars' },
+              { normalizedMerchant: 'whole foods mkt', suggestedCategory: 'Groceries' },
+            ],
+          }
+        }
+        if (url === '/api/review/apply') {
+          return { ok: true, status: 200, json: async () => ({ rulesUpserted: 2 }) }
+        }
+        // refetch /api/review/uncategorized → nothing left to review.
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }) as unknown as typeof fetch,
+    )
+    renderTable({ aiEnabled: true })
+    await userEvent.click(screen.getByRole('button', { name: /pre-fill merchants with ai/i }))
+    await waitFor(() => expect(screen.getAllByText('AI')).toHaveLength(2))
+
+    await userEvent.click(screen.getByRole('button', { name: /apply all/i }))
+    await waitFor(() => {
+      expect(screen.getByText(/categories applied/i)).toBeInTheDocument()
+    })
+    // Queue cleared → empty state renders.
+    expect(screen.getByText(/nothing to review/i)).toBeInTheDocument()
+  })
+
+  it('disables Pre-fill after a 402 BudgetExceededError (non-recoverable, T91)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 402,
+        json: async () => ({
+          errorClass: 'BudgetExceededError',
+          error: 'cap 500c reached',
+        }),
+      })) as unknown as typeof fetch,
+    )
+    renderTable({ aiEnabled: true, monthlyCapCents: 50000 })
+    await userEvent.click(screen.getByRole('button', { name: /pre-fill merchants with ai/i }))
+    await waitFor(() => {
+      expect(screen.getByText(/monthly cap of \$500 reached/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /pre-fill merchants with ai/i })).toBeDisabled()
   })
 })
 

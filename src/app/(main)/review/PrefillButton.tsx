@@ -31,15 +31,19 @@ function dollars(cents: number): string {
  * @param merchantCount number of merchants that will be sent (current row count).
  * @param onPrefill invoked when the button is clicked.
  * @param busy disables the button while a prefill request is in flight.
+ * @param blocked disables the button for non-recoverable AI states (cap reached
+ *   or service unavailable), where a retry would only fail again (T91).
  */
 export function PrefillButton({
   merchantCount,
   onPrefill,
   busy,
+  blocked,
 }: {
   merchantCount: number
   onPrefill: () => void
   busy: boolean
+  blocked?: boolean
 }) {
   const cost = dollars(estimateCents(merchantCount))
   return (
@@ -47,7 +51,7 @@ export function PrefillButton({
       variant="outline"
       size="sm"
       onClick={onPrefill}
-      disabled={busy || merchantCount === 0}
+      disabled={busy || merchantCount === 0 || blocked}
       aria-label="Pre-fill merchants with AI"
     >
       {`Pre-fill ${merchantCount} merchants with AI (~${cost})`}

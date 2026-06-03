@@ -98,7 +98,36 @@ export function buildAssignments(
   return assignments
 }
 
-/** POSTs the prefill request and returns the suggestions array (T89 prefill API). */
+/**
+ * Error thrown by `fetchPrefill` on a non-OK prefill response. Carries the
+ * server's `errorClass` (the typed AI error name, e.g. `'AIRateLimitError'`) and
+ * the HTTP `status` alongside the message so the Review UI can pick the right
+ * banner copy and decide whether the failure is recoverable (T91). Without this
+ * the `errorClass` from the route's `{ errorClass, error }` contract would be
+ * discarded and every failure would look the same.
+ */
+export class PrefillError extends Error {
+  public readonly errorClass: string
+  public readonly status: number
+
+  /**
+   * @param message human-readable message (the route's `error` field).
+   * @param errorClass the typed AI error name from the route (e.g. `'AIRateLimitError'`).
+   * @param status the HTTP status code of the failed response.
+   */
+  constructor(message: string, errorClass: string, status: number) {
+    super(message)
+    this.name = 'PrefillError'
+    this.errorClass = errorClass
+    this.status = status
+  }
+}
+
+/**
+ * POSTs the prefill request and returns the suggestions array (T89 prefill API).
+ * On a non-OK response, throws a `PrefillError` carrying the route's
+ * `errorClass` + HTTP status so the caller can render the matching banner (T91).
+ */
 export async function fetchPrefill(normalizedMerchants: string[]): Promise<PrefillSuggestion[]> {
   const res = await fetch('/api/review/prefill', {
     method: 'POST',
@@ -106,7 +135,9 @@ export async function fetchPrefill(normalizedMerchants: string[]): Promise<Prefi
     body: JSON.stringify({ normalizedMerchants }),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error ?? 'AI prefill failed')
+  if (!res.ok) {
+    throw new PrefillError(data.error ?? 'AI prefill failed', data.errorClass ?? 'UnknownError', res.status)
+  }
   return data
 }
 

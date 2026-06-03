@@ -101,7 +101,7 @@
 | 88 | V1.1 Phase 2 — Apply categorizations API | [x] |
 | 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [x] |
 | 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [x] |
-| 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [ ] |
+| 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [x] |
 | 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [ ] |
 | 93 | V1.1 Phase 2 — SECURITY.md AI Categorization section | [ ] |
 | 94 | V1.1 Phase 2 — E2E validation against real `amibroke` DB | [ ] |
@@ -3292,14 +3292,14 @@ model AppSettings {
 **Functions to implement:** None new (refines T83's typed errors + adds UI surface).
 
 **Acceptance criteria:**
-- [ ] `AIRateLimitError` (429 from Anthropic) → Review screen shows AIStatusBanner: "AI suggestions temporarily rate-limited — try again in a moment. Manual categorization works as normal."
-- [ ] `AIUnavailableError` (5xx / network) → AIStatusBanner: "AI service temporarily unavailable. Manual categorization works as normal."
-- [ ] `AIParseError` → AIStatusBanner: "AI returned an unexpected response — falling back to manual. We've logged this."
-- [ ] `BudgetExceededError` → AIStatusBanner: "AI suggestions paused — monthly cap of $X.XX reached. Manual categorization works as normal. Adjust your cap in Settings if needed."
-- [ ] In ALL error cases: dropdowns remain empty (user can still manually categorize); Apply all still works for any user-filled rows
-- [ ] PrefillButton becomes disabled when AIStatusBanner is showing a non-recoverable state (cap reached, persistent unavailable); re-enabled on next page load when condition clears
-- [ ] EH-01: all errors thrown with context (which call, which merchant batch, the typed class)
-- [ ] CQ-02: AIStatusBanner < 200 lines
+- [x] `AIRateLimitError` (429 from Anthropic) → Review screen shows AIStatusBanner: "AI suggestions temporarily rate-limited — try again in a moment. Manual categorization works as normal."
+- [x] `AIUnavailableError` (5xx / network) → AIStatusBanner: "AI service temporarily unavailable. Manual categorization works as normal."
+- [x] `AIParseError` → AIStatusBanner: "AI returned an unexpected response — falling back to manual. We've logged this."
+- [x] `BudgetExceededError` → AIStatusBanner: "AI suggestions paused — monthly cap of $X.XX reached. Manual categorization works as normal. Adjust your cap in Settings if needed."
+- [x] In ALL error cases: dropdowns remain empty (user can still manually categorize); Apply all still works for any user-filled rows
+- [x] PrefillButton becomes disabled when AIStatusBanner is showing a non-recoverable state (cap reached, persistent unavailable); re-enabled on next page load when condition clears
+- [x] EH-01: all errors thrown with context (which call, which merchant batch, the typed class)
+- [x] CQ-02: AIStatusBanner < 200 lines
 
 **Tests required:**
 - `AIStatusBanner` → renders correct copy for each of the 4 error classes
