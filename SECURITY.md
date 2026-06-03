@@ -71,6 +71,29 @@ Both Moderates are PostCSS advisories inside Next.js's bundled toolchain. They a
 - **Critical / High** — fixed immediately, blocking.
 - **Moderate / Low** — monitored. Re-checked after every `npm install` / `npm update` / `npm audit fix` that touches `next`; revisited if exploitability shifts.
 
+## AI Categorization (V1.1+)
+
+The optional AI-assisted categorization feature uses a large language model to suggest a spending category for uncategorized transactions. It is built so that no financial data leaves the machine — only a single, normalized merchant string per transaction is ever transmitted.
+
+**What data is sent.** Only **normalized merchant strings** — never amounts, accounts, dates, balances, or any other transaction field. This is a binding constraint (**CONSTRAINT-16** in [`docs/constraints.md`](docs/constraints.md)), not a convention. A future change that tries to enrich the prompt with transaction context fails CI.
+
+**Where it goes.** Merchant strings are sent to the **Anthropic API** (Claude Haiku 4.5). They are processed under Anthropic's terms — see [Anthropic's privacy policy](https://www.anthropic.com/legal/privacy).
+
+**How the privacy constraint is enforced.** The commitment above is verified by integration tests in CI, not by code review alone:
+
+- A **denylist regex** runs against the single sanctioned prompt builder, failing the build if any forbidden field (amount, account, date, balance, etc.) can reach the prompt.
+- An **SDK-mocked end-to-end test** captures the outbound request body and asserts it contains only merchant strings.
+
+There is exactly one sanctioned prompt builder; any new LLM use case must implement its own privacy review and prompt builder rather than reuse this pipeline.
+
+**User-provided API key.** Each user supplies their **own** Anthropic API key. Data is **never proxied through any shared server** — requests go directly from the self-hosted app to Anthropic. The key is encrypted at rest with **AES-256-GCM** (the same mechanism described under [Credentials at rest](#credentials-at-rest); **SEC-06**) and is **never returned to the client** after it is saved (**SEC-01**).
+
+**Opt-in.** AI categorization is **off by default**. Manual categorization is always fully functional without an API key — the AI path is purely additive.
+
+**Monthly cost cap.** Spend is bounded by a user-set monthly cap (**default $5**). When the cap is reached, AI calls are **hard-blocked** for the rest of the month. The manual categorization flow keeps working after the cap is hit.
+
+**On an out-of-list response.** If the model returns a category outside the allowed list, the response is **silently dropped and logged LOUD** (**CONSTRAINT-17**). The transaction stays uncategorized and surfaces on the Review queue, where the manual fallback fills it in. Model hallucinations and prompt drift can never quietly corrupt categorization data.
+
 ## Reporting a vulnerability
 
 Email **swarnim.root@gmail.com** with reproduction steps and impact assessment.

@@ -3359,14 +3359,14 @@ model AppSettings {
 **Functions to implement:** None (documentation).
 
 **Acceptance criteria:**
-- [ ] New section "AI Categorization (V1.1+)" added
-- [ ] Documents WHAT data is sent: normalized merchant strings only — never amounts, accounts, dates, balances, or any other transaction field. References CONSTRAINT-16.
-- [ ] Documents WHERE the data goes: Anthropic API (Claude Haiku 4.5). Links to Anthropic's privacy policy.
-- [ ] Documents HOW the privacy constraint is enforced: integration tests in CI (denylist regex against the prompt builder + SDK-mocked end-to-end test against captured request body)
-- [ ] Documents the user-provided-API-key model: users provide their own Anthropic API key; we never proxy data through our servers; the key is encrypted at rest (AES-256-GCM per SEC-06) and never returned to the client after save (SEC-01)
-- [ ] Documents that AI is opt-in (off by default) and that manual categorization is always functional without a key
-- [ ] Documents the monthly cost cap: hard block at user-set cap (default $5); manual flow continues to work after cap hit
-- [ ] Documents the on-out-of-list-response behavior: silently dropped + LOUD logged (CONSTRAINT-17); the transaction stays uncategorized and the manual fallback fills in
+- [x] New section "AI Categorization (V1.1+)" added (`SECURITY.md`, between Dependencies and Reporting)
+- [x] Documents WHAT data is sent: normalized merchant strings only — never amounts, accounts, dates, balances, or any other transaction field. References CONSTRAINT-16.
+- [x] Documents WHERE the data goes: Anthropic API (Claude Haiku 4.5). Links to Anthropic's privacy policy.
+- [x] Documents HOW the privacy constraint is enforced: integration tests in CI (denylist regex against the prompt builder + SDK-mocked end-to-end test against captured request body)
+- [x] Documents the user-provided-API-key model: users provide their own Anthropic API key; we never proxy data through our servers; the key is encrypted at rest (AES-256-GCM per SEC-06) and never returned to the client after save (SEC-01)
+- [x] Documents that AI is opt-in (off by default) and that manual categorization is always functional without a key
+- [x] Documents the monthly cost cap: hard block at user-set cap (default $5); manual flow continues to work after cap hit
+- [x] Documents the on-out-of-list-response behavior: silently dropped + LOUD logged (CONSTRAINT-17); the transaction stays uncategorized and the manual fallback fills in
 
 **Tests required:** None (documentation).
 
