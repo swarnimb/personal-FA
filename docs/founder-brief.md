@@ -373,3 +373,48 @@
 **Check before approving:** Just confirm you're comfortable that a field literally named `errors` now also holds normal (non-error) progress data. If that ever feels untidy, it's a one-line rename to a `detail`/`metadata` field later — fully reversible.
 
 **What this closes off:** Nothing meaningful. If we ever needed to query past backfills by type (we don't, for a single-user app), we could add proper columns then. No door is closed.
+
+---
+
+## FB-24: Investments Tab Reads Live Account Balances, Not Snapshots, for Current Value + Allocation
+
+**Date:** 2026-06-04
+**Architecture section:** `docs/architecture.md` § Financial Calculations → `v_investments_value` note; § Historical Data Strategy
+
+**Decided:** The Investments tab's headline portfolio value and its stocks-vs-crypto allocation now come from the live `Account.currentBalanceCents` field (summed per account type), not from the `BalanceSnapshot` history table as before. The history *chart* still reads snapshots — a trend line needs a time series — but the single "what's it worth right now" number and the pie split read the live account balances.
+
+**Means for your product:** Your Investments tab was showing $0 for portfolio value and an empty allocation. The reason: snapshots were only ever written by the crypto-exchange sync, and you have zero exchange connections — so your SimpleFin-connected Fidelity and Robinhood accounts had no snapshots at all, and the old code summed nothing. The live account balance is always present and is the authoritative current value (it's literally the same number the latest snapshot would hold), so reading it directly fixes the $0 immediately.
+
+**Check before approving:** No action needed — this is a correctness fix. The current value now matches what your accounts actually hold today. The history chart is addressed separately (see FB-25) since it genuinely needs accumulated snapshots over time.
+
+**What this closes off:** Nothing. If exchange connections are added later, their balances flow into `currentBalanceCents` the same way, so the allocation keeps working. Reverting to snapshot-sourced current value would just reintroduce the $0 bug for any account type that doesn't get snapshots written.
+
+---
+
+## FB-25: SimpleFin Sync Now Writes Balance Snapshots (Investment History Accrues Going Forward)
+
+**Date:** 2026-06-04
+**Architecture section:** `docs/architecture.md` § Historical Data Strategy → "Update (2026-06-04)"
+
+**Decided:** The SimpleFin sync now appends a daily `BalanceSnapshot` for each Investment/Crypto account it touches — the same thing the crypto-exchange sync already did. Previously only the exchange sync wrote snapshots, so SimpleFin-connected investment accounts never built any history. A one-time seed script also wrote today's snapshot for those accounts so the history chart has a starting point instead of being empty.
+
+**Means for your product:** Your investment portfolio history chart will now fill in over time for your Fidelity and Robinhood accounts — one data point per day, starting from today (thanks to the seed) and growing with each sync. Like all snapshot-based history (FB-01), there's no pre-existing history to backfill; the line starts now and builds forward. This is the companion fix to FB-24: FB-24 fixed the current-value number, this fixes the chart-over-time.
+
+**Check before approving:** The chart will be a near-flat short line for the first few days/weeks until enough daily points accumulate — that's expected and matches how the crypto/net-worth history already behaves (FB-01). No action needed.
+
+**What this closes off:** Nothing. This brings SimpleFin investment accounts in line with how crypto-exchange accounts already behaved. The `UNIQUE(accountId, date)` constraint keeps it idempotent, so re-running a sync the same day won't create duplicate points.
+
+---
+
+## FB-26: Session 39 Categorization Fixes + Live Rendering of Review/Settings Pages
+
+**Date:** 2026-06-04
+**Architecture section:** `docs/architecture.md` § AI-Assisted Categorization (V1.1 Phase 2) → Categorization lookup precedence ("Keyword exclusion veto" + "Retroactive corrective backfill") and "Dynamic rendering of `/review` and `/settings`"
+
+**Decided:** Three related correctness fixes. (1) **Keyword exclusion:** the keyword categorizer can now skip a rule when the merchant text contains an excluded phrase. The Groceries rule (which matches on `'MARKET'`) now excludes `'MONEY MARKET'` and `'STOCK MARKET'` so brokerage money-market rows stop being filed as groceries. (2) **One-time corrective backfill:** a script re-runs categorization over old investment/crypto transactions that predate the "investment activity → Transfer Out" rule, because the routine sync only ever looks at transactions newer than the last sync and so never revisited those older rows. (3) **Live rendering:** the `/review` and `/settings` pages now force fresh per-request rendering in the live app (they previously risked being frozen at build time because they don't read any URL/cookie input); the demo build keeps baking them statically.
+
+**Means for your product:** Money-market brokerage transactions stop showing up under Groceries. Old investment transactions that were stuck as "Uncategorized" before the Transfer Out rule existed get cleaned up by the one-time script. And on your live local app, the Review queue and the AI Settings page (including your current AI spend) always show current data instead of a stale build-time snapshot — the public demo is unaffected and still ships as fast static pages.
+
+**Check before approving:** The backfill and the snapshot seed (FB-25) are one-time scripts — run them once on your machine; they don't run automatically each sync. The keyword-exclusion mechanism is general: if another rule's keyword ever over-matches in the future, the fix is to add an `excludeKeywords` phrase to that rule rather than weakening the keyword. No action needed beyond running the one-time scripts once.
+
+**What this closes off:** Nothing. The exclusion list is additive (add phrases as needed). The corrective backfill is a one-off cleanup, not a permanent pipeline change — routine sync still categorizes new rows correctly via the existing precedence (FB-20). Forcing live rendering on these two pages is the page-level expression of the existing V1.0-live vs. demo-static split (FB-14); it doesn't change the demo.

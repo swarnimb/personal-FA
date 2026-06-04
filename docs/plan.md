@@ -3400,3 +3400,7 @@ model AppSettings {
 
 **Depends on:** T79–T93.
 **Specialist:** @qa
+
+**Session 39 (2026-06-04) — E2E executed:** Run against the real `amibroke` DB. Surfaced and fixed 5 pre-existing bugs: (1) AI backfill button was a dead stub (now wired — completes T85/T86); (2) Review queue not grouped by account; (3) `/review` + `/settings` silently static in prod (forced dynamic); (4) 103 stuck investment/crypto txns + dividends mis-categorized + a `'MONEY MARKET'`→Groceries keyword false-positive; (5) portfolio value/allocation reading $0. Core PRD §15 success metric met: every uncategorized transaction now has a clear, working path to categorization. **Left `[ ]` — residuals pending:** builder confirmation of the privacy disclosure modal (first AI toggle-on) + persistent Review privacy banner; 3 blank-merchant Loan-account txns still Uncategorized (no merchant to match); formal `@qa`/`@security` sign-off on Phase 2 (existing reports predate it). See `docs/session-handoff.md` for full detail.
+
+> **Next session (not yet a numbered task):** "Account as-of timestamp" feature — surface SimpleFin's per-account `balance-date` per account card on the Accounts page. To be scoped into a numbered task next session.

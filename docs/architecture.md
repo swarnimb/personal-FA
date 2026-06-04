@@ -58,7 +58,7 @@ All financial arithmetic lives in PostgreSQL. Zero arithmetic in TypeScript.
 **PostgreSQL views (current-state, no parameters needed):**
 - `v_liquid_cash` — SUM of Checking + Savings account balances
 - `v_net_worth` — total assets minus total liabilities (CreditCard/Loan stored as positive cents, view subtracts them — see CONSTRAINT-11)
-- `v_investments_value` — latest BalanceSnapshot sum for Investment + Crypto accounts
+- `v_investments_value` — latest BalanceSnapshot sum for Investment + Crypto accounts. **Note (2026-06-04):** the Investments tab no longer sources its headline value or stocks-vs-crypto allocation from snapshots. `getAllocation` (`src/lib/investments-queries.ts`) and `GET /api/investments` now derive both from live `Account.currentBalanceCents` via a Prisma `groupBy` on `type` over active Investment/Crypto accounts. `BalanceSnapshot` was never populated for SimpleFin accounts (only the crypto-exchange sync wrote snapshots, and there are zero exchange connections), so the snapshot-sourced value rendered $0; `currentBalanceCents` is authoritative, always present, and is the live equivalent of the latest snapshot. See FB-24.
 
 **Prisma `$queryRaw` (time-range parameterized):**
 - Income by category for date range
@@ -83,6 +83,8 @@ Historical balance computable at query time: `current_balance_cents − SUM(tran
 
 **Value-based accounts (Investment, Crypto):**
 Value changes from market movements, independent of transactions. Cannot be reconstructed. Daily cron appends one `BalanceSnapshot` row per account. History starts from installation date and grows forward. The `BalanceSnapshot` table has a `UNIQUE(accountId, date)` constraint — cron is idempotent.
+
+**Update (2026-06-04):** snapshots are now also written by the SimpleFin sync. `src/lib/sync-simplefin.ts` `upsertAccount()` calls `appendBalanceSnapshot(account.id, balanceCents, now)` for Investment/Crypto accounts (mirrors `sync-crypto.ts`), so portfolio history accrues for SimpleFin investment accounts going forward — previously only the crypto-exchange sync wrote snapshots, leaving SimpleFin investment accounts with none. A one-time seed script (`scripts/backfill-investment-snapshots.ts`) seeded today's snapshots so the history chart has a starting point. `getPortfolioHistory` still reads `BalanceSnapshot` (a time-series chart needs the series); only the current-value/allocation read moved to `Account.currentBalanceCents` (see § Financial Calculations and FB-24). See FB-25.
 
 **Gap handling:** If no snapshot exists for a specific date in a chart range, the most recent prior snapshot is forward-filled via SQL (LAG window function or lateral subquery).
 
@@ -468,6 +470,10 @@ Single function `categorizeTransaction(transaction, account): string`:
 
 Step 3 is the A-11 spike's side-finding fix. Brokerage reinvestments and crypto buys-within-account ARE internal money movement; `Transfer Out` is semantically correct and CONSTRAINT-15 already excludes Transfer Out from Spending. The filter fires only when Step 2 returned `Uncategorized` so dividend keyword matches (`DIVIDEND` → `Interest & Dividends`) still classify correctly.
 
+**Keyword exclusion veto (2026-06-04):** Step 2's keyword engine (`applyKeywordEngine` in `src/lib/categorize.ts`, rules in `src/lib/categorization-rules.ts`) gained an optional `excludeKeywords` field per rule: a rule is skipped if the merchant contains an excluded phrase. The Groceries rule excludes `'MONEY MARKET'` and `'STOCK MARKET'` so its `'MARKET'` keyword no longer mis-matches money-market brokerage rows. See FB-26.
+
+**Retroactive corrective backfill (2026-06-04):** routine sync only refetches transactions newer than `lastSyncedAt`, so investment/crypto rows that predate the T81 investment→`Transfer Out` rule (Step 3) were never revisited and stayed `Uncategorized`. A one-time corrective backfill (`src/lib/backfill-investment-categorization.ts` + `scripts/backfill-investment-categories.ts`) re-runs `categorizeTransaction` over those pre-existing investment/crypto rows. Distinct from the AI backfill (§ Async / background pattern), which explicitly excludes investment/crypto accounts. See FB-26.
+
 ### Settings surface — `/settings` route
 
 - `src/app/(main)/settings/page.tsx` — server component; fetches `AppSettings` singleton + current-month `LLMCost`
@@ -516,6 +522,10 @@ No new async infrastructure (no queue, no worker process). Cron-driven sync cont
 3. `[ts]_add_app_settings` — `AppSettings` table (with `id = 'singleton'` default + seeded default row)
 
 No structural `Account` changes (investment-account filter is application code, not schema).
+
+### Dynamic rendering of `/review` and `/settings` (2026-06-04)
+
+The `/review` and `/settings` page server components read no `searchParams` or `cookies`, so Next 15 would statically prerender them — freezing live data (the review queue, AI settings + current spend) at build time, which `next start` would then serve stale. Both pages now `await connection()` (from `next/server`) when NOT in demo mode, which forces per-request rendering. The demo static export (`output: 'export'`) skips the `connection()` call so the pages stay exportable. This is the V1.0/demo two-deployment split applied at the page level: live deployment renders per request, demo bakes at build time. See FB-26.
 
 ### Boundary preservation
 

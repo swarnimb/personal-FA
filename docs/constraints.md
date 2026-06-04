@@ -218,6 +218,18 @@
 
 ---
 
+### CONSTRAINT-18: Investment/Crypto portfolio value source + daily snapshots
+
+**Decision:** The Investments portfolio value and stocks-vs-crypto allocation derive from live `Account.currentBalanceCents` (active Investment/Crypto accounts), NOT from the `BalanceSnapshot` table. Every sync (SimpleFin + crypto-exchange) records a daily `BalanceSnapshot` per Investment/Crypto account so the portfolio-history chart accrues over time.
+
+**What it means in practice:** Portfolio value and allocation must read the authoritative current balance off the `Account` row — never aggregate `BalanceSnapshot` for the headline value or the allocation split. `BalanceSnapshot` is written once per day per Investment/Crypto account on every sync, and the portfolio-history chart is its only legitimate consumer.
+
+**Who decided and when:** Established Session 39, 2026-06-04.
+
+**What this closes off:** `BalanceSnapshot` is not guaranteed populated (SimpleFin sync historically wrote none), so any value/allocation path that depends on it can silently read zero or stale data. Deriving the headline value or allocation from snapshots reopens that gap; history is the only consumer that legitimately needs the snapshot time-series.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -239,3 +251,4 @@
 | 15 | Internal transfers excluded from Spending view | All spending-side queries filter on `SPENDING_EXCLUDED_CATEGORIES` (income + `Transfer Out`) | Task 78 / FB-18 / builder | 2026-05-21 |
 | 16 | LLM prompts contain only normalized merchant strings | No transaction fields ever appear in prompts; integration test enforces the denylist | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |
 | 17 | LLM responses validated against allowed-values list | Out-of-list responses dropped with LOUD log, never accepted as data | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |
+| 18 | Investment/Crypto value from live `Account` balance; daily `BalanceSnapshot` for history only | Value/allocation read `currentBalanceCents`, never aggregate snapshots; sync writes one snapshot/day/account for the history chart | Session 39 / builder | 2026-06-04 |
