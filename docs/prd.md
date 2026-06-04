@@ -591,6 +591,33 @@ Every uncategorized transaction has a clear, working path to categorization on t
 
 ---
 
+## 16. Transaction Browser (All Transactions View) — V1.2
+
+> A single page listing **every** transaction across all accounts, with filter/search and inline edit/delete. Today transactions are only visible filtered inside Spending, Income, or the Dashboard preview — no way to find a specific one or fix a bad entry without touching the database. Reuses the existing `/api/transactions` GET/PATCH/DELETE; only merchant search is new.
+
+**Logic**
+- **Table:** date · merchant · category · account · amount. Newest first, 20/page (server pagination). Integer cents → render conversion (CALC-05); sign preserved (income +, spending −); Privacy mode masks (PrivacyAmount).
+- **Filters:** date-range, account, category, status (all already supported) **+ merchant text search** (new, case-insensitive `contains`). Any filter change resets to page 1.
+- **Edit/Delete:** row → modal (date, merchant, amount, category, notes) via `PATCH`; delete via `DELETE` with confirm. Single-transaction only — no MerchantRule side-effect (stays on Spending tab, §T92).
+- **Demo mode:** GET 404s in the static export (no DB) → "Available when running locally" placeholder, never an error.
+- **Nav:** new "Transactions" sidebar item; Income/Spending "View All Entries" link here (plain — no direction filter).
+
+**Acceptance Criteria**
+- [ ] `/transactions` lists all transactions paginated (20/page), newest first.
+- [ ] Each filter (account/category/status/date-range) narrows the table and resets to page 1.
+- [ ] Merchant search "amazon" → only merchants containing "amazon" (case-insensitive).
+- [ ] Edit + save → `PATCH` persists, table refreshes; invalid category → 400 surfaced as toast (CONSTRAINT-17).
+- [ ] Delete + confirm → `DELETE` removes it, table refreshes.
+- [ ] Demo mode → placeholder, no crash, no failed-API toast.
+- [ ] "View All Entries" (Income + Spending) → working `/transactions`.
+- [ ] Desktop-only, Velvet Ledger dark, no layout borders (CONSTRAINT-04/05).
+
+**Out of scope (V1.2):** income/expense direction filter, amount-range filter, bulk multi-select, custom column sorting (date-desc only), CSV export (§13), MerchantRule update from this view.
+
+**Success metric:** Locate any transaction in <10s and fix a wrong entry without opening the database.
+
+---
+
 ## Category List (Complete)
 
 **Income categories:**

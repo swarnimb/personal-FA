@@ -3531,3 +3531,133 @@ model AppSettings {
 
 **Depends on:** Task 96 (complete) — the `AccountCard` type now carries `source` + the stale-cue render that must survive the move.
 **Specialist:** `@write-tests` (verify/adjust the `ConnectedInstitutions` test import surface). No UI/design change — Velvet Ledger render output is byte-identical.
+
+---
+
+## Task 98: Add case-insensitive merchant search to GET /api/transactions
+
+**Files:**
+- `src/app/api/transactions/route.ts` — modify (extend the GET `where` builder)
+- `src/__tests__/api/transactions.test.ts` — modify (add merchant-filter cases to the existing `describe('GET /api/transactions')`)
+
+**Functions to implement:**
+- `GET(req: Request): Promise<Response>` (existing) — add to the inline `where`: `...(merchant ? { merchant: { contains: merchant, mode: 'insensitive' } } : {})` where `merchant = searchParams.get('merchant')?.trim()`. Empty/whitespace-only merchant adds NO clause. Keep range/accountId/category/status/page + pageSize=20 byte-identical. Keep `isDemoMode() → demoNotFound()` as the first statement.
+
+**Acceptance criteria:**
+- [ ] `?merchant=trader` matches `"TRADER JOES"` (Prisma `contains` + `mode:'insensitive'`), verified via the mocked `db.transaction.findMany`/`count` `where` argument.
+- [ ] Empty/whitespace-only merchant param adds no merchant clause (where has no `merchant` key).
+- [ ] Merchant filter composes with accountId + category + status + range in one `where`.
+- [ ] Response envelope `{ data: { transactions, total, page, pageSize } }` unchanged; pageSize 20; `orderBy: { date: 'desc' }` unchanged.
+- [ ] Demo posture unchanged: `isDemoMode()` returns `demoNotFound()` (404) before any DB access.
+- [ ] EH-01: invalid `range` still returns existing structured 400; no new throw paths. CQ-01: GET stays < 50 logic lines.
+
+**Tests required:**
+- `describe('GET /api/transactions')` → `it('filters by merchant case-insensitively (contains + insensitive mode)')` [happy]
+- `describe('GET /api/transactions')` → `it('ignores an empty merchant param (no merchant clause)')` [edge]
+
+**Depends on:** None
+**Specialist:** @write-tests
+
+---
+
+## Task 99: Build the /transactions page, filter bar, and paginated table (read path)
+
+**Files:**
+- `src/app/(main)/transactions/page.tsx` — create (server component; demo branch added in T101)
+- `src/components/transactions/TransactionBrowser.tsx` — create (client; filter + page state via URL searchParams, fetches GET /api/transactions, renders filter bar + table + pager)
+- `src/components/transactions/TransactionTable.tsx` — create (presentational table: date · merchant · category · account · amount; no row actions yet)
+- `src/components/transactions/TransactionFilters.tsx` — create (date-range PRESET selector + account/category/status Selects + merchant text Input)
+- `src/__tests__/components/transaction-browser.test.tsx` — create
+
+**Functions to implement:**
+- `TransactionsPage({ searchParams }): Promise<JSX.Element>` — server component. Fetches active accounts via `db.account.findMany({ where:{ isActive:true }, select:{ id,name }, orderBy:{ name:'asc' } })` (mirrors spending/page.tsx). Passes accounts to `<TransactionBrowser>`.
+- `TransactionBrowser({ accounts }): JSX.Element` — 'use client'. Reads useSearchParams/usePathname/useRouter; derives range (default 'ytd'), accountId, category, status, merchant, page from URL. Fetches `/api/transactions?…` in a useEffect keyed on those params; holds `{ transactions,total,page,pageSize }` + isLoading + error.
+- `setFilter(key, value): void` — updates one filter param, deletes when empty, force-sets page=1, pushes URL (< 50 logic lines).
+- `goToPage(page: number): void` — sets only the page param, pushes URL.
+- `TransactionFilters({ accounts, value, onChange }): JSX.Element` — date-range as the PRESET selector reusing the `RANGES` shape from the existing `TimeRangeSelector` (ytd|1m|3m|6m|1y|max) + account/category/status Selects + a DEBOUNCED merchant Input. onChange(key,value) delegates to setFilter.
+- `TransactionTable({ transactions }): JSX.Element` — amount cell uses `<PrivacyAmount cents={Math.abs(tx.amountCents)} />` with sign + color by `amountCents >= 0` (+/text-primary vs −/text-tertiary). Account column resolves name from accountId.
+
+**Acceptance criteria:**
+- [ ] `/transactions` renders a paginated table (date · merchant · category · account · amount), newest-first, 20 rows/page.
+- [ ] Filters: date-range PRESET selector (6 buttons, matching the app-wide TimeRangeSelector), account, category, status, merchant search; changing ANY filter resets to page 1 and reflects in the URL querystring.
+- [ ] Pager driven by total/pageSize; disabled at bounds.
+- [ ] CALC-05: amounts via PrivacyAmount (cents→dollars at render only, never divided in TS); sign preserved; positive text-primary, negative text-tertiary; Privacy mode masks all amounts.
+- [ ] CONSTRAINT-17 surfacing: a 400 from the API shows a toast, not a crash (useToast); EH-01 — fetch failures set a loud, contextful error in state.
+- [ ] CONSTRAINT-04 desktop-only (1280px+), no mobile breakpoints. CONSTRAINT-05 Velvet Ledger dark surfaces, NO borders/divide- for separation (row hover surface-highest, header surface-low).
+- [ ] CQ-02 every new component file < 200 lines; CQ-01 handlers < 50 logic lines. No default exports; Prisma never imported into a client component.
+
+**Tests required:**
+- `describe('TransactionBrowser')` → `it('renders fetched transactions and resets to page 1 when a filter changes')` [happy]
+- `describe('TransactionBrowser')` → `it('shows an error/toast and no crash when the fetch returns non-OK')` [error]
+- `describe('TransactionTable')` → `it('renders sign + PrivacyAmount per row, preserving negative/positive color')` [happy]
+
+**Depends on:** Task 98
+**Specialist:** @ui-amibroke · @write-tests
+
+---
+
+## Task 100: Add inline edit + delete to transaction rows (write path)
+
+**Files:**
+- `src/components/transactions/EditTransactionModal.tsx` — create (model on EditPendingModal.tsx minus approve; fields: date, merchant, amount + sign toggle, category, notes)
+- `src/components/transactions/useTransactionMutation.ts` — create (PATCH + DELETE to /api/transactions/[id]: isSaving, demo-guard, named error class, toast, router.refresh — model on useAccountMutation.ts)
+- `src/components/transactions/TransactionTable.tsx` — modify (add per-row Edit + Delete affordances)
+- `src/__tests__/components/edit-transaction-modal.test.tsx` — create
+
+**Functions to implement:**
+- `useTransactionMutation(id: string): { patch, remove, isSaving }` — 'use client'. `patch(body)` PATCHes with any of `{ date, merchant, amountCents, category, notes }` (NEVER sends `updateRule` → no MerchantRule side-effect per PRD §16). `remove()` DELETEs. Both: isDemoMode() short-circuit → demo toast + return; non-OK → throw named `TransactionMutationError` → toast(err.message); success → router.refresh(). Each handler < 50 logic lines.
+- `EditTransactionModal({ transaction, open, onOpenChange, accounts? }): JSX.Element` — controlled dialog. txToForm derives `amountStr = String(Math.abs(amountCents)/100)`, `isPositive = amountCents >= 0`; submit recombines `Math.round(parseFloat(amountStr)*100) * (isPositive ? 1 : -1)` (sign preserved; the only ×100 lives at the input boundary, like EditPendingModal/AddTransactionModal). Category Select uses SELECTABLE_CATEGORIES_SORTED. Calls patch(...); closes on success.
+- TransactionRow actions (in TransactionTable.tsx) — Edit opens the modal; Delete confirms before calling remove().
+
+**Acceptance criteria:**
+- [ ] Row Edit opens a modal pre-filled with date, merchant, amount (abs + sign toggle), category, notes; Save PATCHes via /api/transactions/[id] and router.refresh().
+- [ ] Delete prompts for confirmation then calls DELETE /api/transactions/[id]; success refreshes.
+- [ ] PRD §16 single-transaction rule: PATCH body NEVER includes `updateRule` (no MerchantRule upsert / retroactive re-categorization).
+- [ ] CONSTRAINT-17: invalid-category 400 from PATCH surfaces as a toast, not a crash; EH-01 — hook throws a named contextful error and toasts its message.
+- [ ] Demo mode: patch + remove short-circuit to a demo toast with no network call.
+- [ ] CALC-05: amount ÷100 on load / ×100 on save confined to the modal form boundary; integer cents stored; sign preserved.
+- [ ] CONSTRAINT-05 glassmorphism dialog per EditPendingModal, no layout borders. CQ-02 modal < 200 lines; CQ-01 handlers < 50 logic lines. No default exports.
+
+**Tests required:**
+- `describe('EditTransactionModal')` → `it('pre-fills from amountCents (abs + sign) and PATCHes integer cents with NO updateRule on save')` [happy]
+- `describe('EditTransactionModal')` → `it('surfaces a toast and stays open on a non-OK PATCH (invalid category 400)')` [error]
+- `describe('useTransactionMutation')` → `it('short-circuits to a demo toast and makes no fetch in demo mode (patch + remove)')` [guard]
+
+**Depends on:** Task 99
+**Specialist:** @ui-amibroke · @write-tests
+
+---
+
+## Task 101: Add Transactions nav item, demo placeholder, and remove the dead Income "View All Entries" link
+
+**Files:**
+- `src/components/layout/Sidebar.tsx` — modify (add a "Transactions" NAV_ITEMS entry, lucide icon e.g. Receipt/List, href '/transactions')
+- `src/__tests__/components/layout/Sidebar.test.tsx` — modify (update EXPECTED from 8 to 9 items + order/count assertions)
+- `src/app/(main)/transactions/page.tsx` — modify (add demo branch + dynamic-render gate)
+- `src/components/transactions/TransactionsUnavailable.tsx` — create ("Available when running locally" placeholder, Velvet Ledger, no border)
+- `src/components/income/IncomeTransactionList.tsx` — modify (REMOVE the `ViewAllEntriesLink` element entirely — drop the dead link; remove now-unused isDemoMode import, Link import, and DISABLED_LINK_TOOLTIP const if unused)
+- `src/__tests__/components/income.test.tsx` — modify (remove/replace the two tests asserting the "View All Entries" link/span; assert the affordance is no longer rendered)
+
+**Important scope notes (do NOT do these):**
+- Do NOT rewire the Spending "View All" link — leave SpendingTransactionList untouched.
+- Do NOT add an income/expense direction filter or `?type=` param anywhere.
+
+**Functions to implement:**
+- `Sidebar({ reviewCount })` (existing) — insert `{ label:'Transactions', href:'/transactions', icon:<Receipt/> }` into NAV_ITEMS. Active-highlight already handles any href via `pathname === item.href`.
+- `TransactionsPage({ searchParams })` (from T99) — add at top: `if (isDemoMode()) return <TransactionsUnavailable />` so the static export never calls the (stripped) API. When NOT demo, `await connection()` (next/server) to force per-request rendering (FB-26 pattern used by /review + /settings).
+- `TransactionsUnavailable(): JSX.Element` — placeholder card in surface-low, no border (CONSTRAINT-05).
+
+**Acceptance criteria:**
+- [ ] Sidebar shows a "Transactions" item linking to /transactions; active-state highlight works on that route; Sidebar test item count updated 8 → 9.
+- [ ] In demo mode, /transactions renders the "Available when running locally" placeholder and makes NO call to GET /api/transactions — never an error (PRD §16).
+- [ ] In non-demo, the page renders per request (connection() gate), not a stale static prerender.
+- [ ] The dead Income "View All Entries" link is removed entirely (no anchor, no inert span); income.test.tsx updated to assert it's gone. No unused imports left.
+- [ ] Spending "View All" link unchanged. CONSTRAINT-05 placeholder uses dark surface tokens, no border. CQ-02 TransactionsUnavailable < 200 lines.
+
+**Tests required:**
+- `describe('Sidebar')` → `it('renders a Transactions link to /transactions and keeps all items in order')` (EXPECTED → 9) [happy]
+- `describe('IncomeTransactionList')` → `it('no longer renders a View All Entries affordance')` [happy]
+- `describe('TransactionsUnavailable / demo')` → `it('renders the placeholder and issues no fetch in demo mode')` [guard]
+
+**Depends on:** Task 99 and Task 100
+**Specialist:** @ui-amibroke · @write-tests
