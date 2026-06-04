@@ -103,7 +103,7 @@ export function HoldingsList({
                     </td>
                     <td className="px-3 py-3 font-inter text-sm text-on-surface">{h.description}</td>
                     <td className="px-3 py-3 font-manrope font-semibold text-sm text-secondary text-right">
-                      {h.priceCents !== null ? <PrivacyAmount cents={h.priceCents} /> : '—'}
+                      {h.priceCents !== null ? <PrivacyAmount cents={h.priceCents} precise /> : '—'}
                     </td>
                     <td className="px-3 py-3 font-inter text-sm text-on-surface-variant text-right">
                       {h.shares !== null ? h.shares : '—'}
