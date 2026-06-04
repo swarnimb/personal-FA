@@ -104,7 +104,9 @@
 | 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [x] |
 | 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [x] |
 | 93 | V1.1 Phase 2 — SECURITY.md AI Categorization section | [x] |
-| 94 | V1.1 Phase 2 — E2E validation against real `amibroke` DB | [ ] |
+| 94 | V1.1 Phase 2 — E2E validation against real `amibroke` DB | [x] |
+| 95 | Account balance "As of" timestamp (§7.1) | [x] |
+| 96 | Stale-balance warning on Accounts card "As of" line (§7.2) | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3445,3 +3447,47 @@ model AppSettings {
 **Specialist:** `@data-sync` (migration + `upsertAccount`) · `@ui-amibroke` (card line + Velvet Ledger styling)
 
 **Session 41 (2026-06-04) — IMPLEMENTED:** `balanceAsOf` column added + migration `20260604120000_add_account_balance_as_of` applied to dev + test DBs. `upsertAccount` persists SimpleFin `balance-date` (finite-number guard → null on malformed feed). `formatAsOf` (hybrid relative/absolute, native Intl) in `format.ts`; precedence resolved in `toCard()`; card line rendered with `suppressHydrationWarning` + `text-on-surface-variant`. `tsc` clean; **372 unit + 92 integration green** (re-run by orchestrator). Docs updated. **Pending:** live visual check on `/accounts` (relative/absolute display across SimpleFin/crypto/manual cards) + optional `@qa`/`@security`. Built on branch `feat/t95-account-as-of-timestamp`.
+
+**Session 42 (2026-06-04) — CLOSED:** merged to `main` (merge commit `0140751`); `@qa` APPROVED + `@security` CLEAR.
+
+---
+
+## Task 96: Stale-balance warning on Accounts card "As of" line
+
+**Source:** `docs/prd.md` §7.2 — Stale-Balance Warning (V1.2)
+
+**Files:**
+- `src/lib/format.ts` — modify (add `isBalanceStale` beside `formatAsOf`)
+- `src/app/(main)/accounts/page.tsx` — modify (`toCard()` passes `source`)
+- `src/components/accounts/ConnectedInstitutions.tsx` — modify (`AccountCard` type gains `source`; `AccountRow` "As of" line renders ⚠ + tint when stale)
+- `src/__tests__/lib/format.test.ts` — modify (add `isBalanceStale` describe block)
+
+**Functions to implement:**
+- `isBalanceStale(date: Date, now?: Date): boolean` — pure helper beside `formatAsOf`. Returns `true` only when `date` is STRICTLY older than 7 days from `now` (`now.getTime() - date.getTime() > 7 * 24 * 60 * 60 * 1000`); `false` at exactly 7 days. `now` injectable for deterministic tests. Does not handle null — caller gates on `asOf` truthiness (display logic, not a financial calc; CALC-01 does not apply, consistent with `formatAsOf`).
+- `toCard()` (existing, page.tsx) — add `source: a.source` (string) to the returned card shape so the card can apply the manual exemption.
+- `AccountCard` type (ConnectedInstitutions.tsx) — add `source: string`.
+- `AccountRow` "As of" block (existing) — compute `const isStale = acc.source !== 'Manual' && acc.asOf != null && isBalanceStale(new Date(acc.asOf))`; when stale, prepend a `⚠ ` glyph and swap the muted class `text-on-surface-variant` → `text-tertiary/70`. Keep `suppressHydrationWarning`.
+
+**Acceptance criteria:**
+- [x] Auto-synced account (`source` ∈ SimpleFin/Coinbase/Kraken) with effective as-of (`balanceAsOf ?? lastSyncedAt ?? updatedAt`) STRICTLY older than 7 days → "As of …" line shows ⚠ glyph + `text-tertiary/70` tint.
+- [x] Effective as-of ≤ 7 days → normal §7.1 style, no warning. Boundary: exactly 7 days = NOT stale; any amount over 7 days = stale.
+- [x] Manual account (`source === 'Manual'`) → never flagged, regardless of age.
+- [x] `asOf === null` → no warning, no "Invalid date" (existing truthiness guard; `isBalanceStale` only called when `asOf` non-null).
+- [x] CONSTRAINT-05: muted `tertiary` token at reduced opacity + ⚠ glyph only — NO border, NO background fill, NO red box. Subtle, not alarming. Reuses the established `text-tertiary` caution treatment (same token as "Needs review").
+- [x] Does not touch or duplicate the existing `SyncBadge` (✓ Synced / Never synced) — the stale warning lives on the timestamp line only (complementary, not redundant — see §7.2).
+- [x] Privacy mode unaffected (warning is on the timestamp line, independent of `PrivacyAmount`).
+- [x] Scope = Accounts cards only — no Dashboard / Net Worth changes.
+- [x] Build-time check: confirm CSV-imported accounts' `source` value — if `Manual`, they are (correctly) exempt; record the finding in the session log.
+
+**Tests required:**
+- [x] `isBalanceStale` → `now − 8 days` returns `true` [happy path]
+- [x] `isBalanceStale` → `now − 2 days` returns `false` [happy path]
+- [x] `isBalanceStale` → exactly `now − 7 days` returns `false` (boundary) [edge case]
+- [x] `isBalanceStale` → `now − (7 days + 1 min)` returns `true` (boundary) [edge case]
+
+**Depends on:** Task 95 (Account "As of" timestamp) — complete.
+**Specialist:** `@ui-amibroke` (card line + Velvet Ledger `tertiary` tint) · `@write-tests` (`isBalanceStale` unit tests)
+
+**Design decision (Session 42):** No dedicated warning/amber token exists in the Velvet Ledger palette. Builder chose to reuse `tertiary` (soft red) at muted opacity, matching the existing "Needs review" caution cue. `error` token avoided (reserved for form validation; reads as alarming).
+
+**Session 42 (2026-06-04) — IMPLEMENTED:** `isBalanceStale(date, now?)` added to `format.ts` (named `SEVEN_DAYS_MS` const, strict `>`, JSDoc); `toCard()` passes `source`; `AccountCard` gains `source: string`; `AccountRow` "As of" line renders `⚠ ` + `text-tertiary/70` when `source !== 'Manual' && asOf && isBalanceStale(...)`, else unchanged (`suppressHydrationWarning` kept, no border/box). `tsc` clean; **376 unit tests green / 62 files** (orchestrator re-run + diff-reviewed). CSV-import edge: CSV import does not create accounts (only inserts transactions into an existing account), so it introduces no staleness eligibility. **Pending:** optional live `/accounts` visual check (stale card shows ⚠ + soft-red) + optional `@code-review`. Built on branch `feat/t96-stale-balance-warning` (not yet committed).

@@ -433,3 +433,18 @@
 **Check before approving:** `balanceAsOf` is null until the next SimpleFin sync; existing accounts fall back to `lastSyncedAt` (synced) or `updatedAt` (manual) until then — expected.
 
 **What this closes off:** Nothing — additive nullable column, fully reversible. Stale-balance *warnings* (color/alerts) deliberately deferred to V1.2.
+
+---
+
+## FB-28: Stale-Balance Warning
+
+**Date:** 2026-06-04
+**Architecture section:** `docs/architecture.md` § Accounts balance freshness; PRD §7.2
+
+**Decided:** When an auto-synced account's effective "As of" timestamp is strictly older than 7 days, its freshness line is shown with a subtle soft-red tint + a ⚠ glyph. Manual accounts are exempt. Passive visual only — no alerts or notifications.
+
+**Means for your product:** A bank or crypto account that quietly stops syncing now stands out at a glance on the Accounts tab, instead of silently feeding a stale number into your net worth.
+
+**Check before approving:** Threshold is 7 days — accounts synced within the past week look unchanged. Reused the existing soft-red caution color (the same one as "Needs review") rather than adding a new palette token.
+
+**What this closes off:** Nothing structural — pure display logic, fully reversible. Deferred: a Dashboard/Net Worth aggregate stale cue and a configurable threshold.
