@@ -6,6 +6,7 @@ import { db } from './db'
 import { isDemoMode } from './demo-mode'
 import { fetchAccounts, fetchTransactions } from './simplefin'
 import { inferAccountType, normalizeBalanceCents } from './account-types'
+import { appendBalanceSnapshot } from './snapshot'
 import type { SimplefinAccount, SimplefinHolding, SimplefinTransaction } from './simplefin'
 
 async function refreshHoldings(accountId: string, holdings: SimplefinHolding[]): Promise<void> {
@@ -73,6 +74,15 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string;
   if (hasHoldings) {
     await refreshHoldings(account.id, sfAccount.holdings!)
   }
+
+  // Record a daily balance snapshot for portfolio-history accounts. Cash
+  // net-worth does not use snapshots, so only Investment/Crypto get them.
+  // The helper is idempotent (createMany + skipDuplicates), so re-syncing the
+  // same day is safe. Mirrors the crypto sync (sync-crypto.ts).
+  if (accountType === 'Investment' || accountType === 'Crypto') {
+    await appendBalanceSnapshot(account.id, balanceCents, now)
+  }
+
   return { id: account.id, type: accountType }
 }
 

@@ -5,7 +5,6 @@ import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 
 
 type HistoryRow = { date: string; valueCents: bigint }
-type AllocationRow = { type: string; totalCents: bigint }
 
 async function getInvestmentsHistory(
   from: Date,
@@ -45,26 +44,25 @@ async function getInvestmentsHistory(
   return rows.map((r) => ({ date: r.date, valueCents: Number(r.valueCents) }))
 }
 
+/**
+ * Stocks vs Crypto split, computed from live `Account.currentBalanceCents`
+ * rather than BalanceSnapshot. The snapshot table is not populated for
+ * SimpleFin accounts, so summing it returns $0; currentBalanceCents is the
+ * authoritative current value (the exact equivalent of the latest snapshot,
+ * but always present). Investment type → stocks, Crypto type → crypto.
+ */
 async function getAllocation(): Promise<{ stocksCents: number; cryptoCents: number }> {
-  const rows = await db.$queryRaw<AllocationRow[]>(Prisma.sql`
-    SELECT
-      a.type,
-      COALESCE(SUM(bs."balanceCents"), 0)::int AS "totalCents"
-    FROM "BalanceSnapshot" bs
-    INNER JOIN (
-      SELECT "accountId", MAX(date) AS max_date
-      FROM "BalanceSnapshot"
-      GROUP BY "accountId"
-    ) latest ON bs."accountId" = latest."accountId" AND bs.date = latest.max_date
-    INNER JOIN "Account" a ON bs."accountId" = a.id
-    WHERE a.type IN ('Investment', 'Crypto') AND a."isActive" = true
-    GROUP BY a.type
-  `)
+  const rows = await db.account.groupBy({
+    by: ['type'],
+    where: { isActive: true, type: { in: ['Investment', 'Crypto'] } },
+    _sum: { currentBalanceCents: true },
+  })
   let stocksCents = 0
   let cryptoCents = 0
   for (const r of rows) {
-    if (r.type === 'Investment') stocksCents = Number(r.totalCents)
-    if (r.type === 'Crypto') cryptoCents = Number(r.totalCents)
+    const total = r._sum.currentBalanceCents ?? 0
+    if (r.type === 'Investment') stocksCents = total
+    if (r.type === 'Crypto') cryptoCents = total
   }
   return { stocksCents, cryptoCents }
 }

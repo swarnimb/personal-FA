@@ -15,7 +15,12 @@ vi.mock('@/lib/db', () => ({
       update: vi.fn(),
     },
     merchantRule: { findUnique: vi.fn() },
+    balanceSnapshot: { createMany: vi.fn() },
   },
+}))
+
+vi.mock('@/lib/snapshot', () => ({
+  appendBalanceSnapshot: vi.fn(),
 }))
 
 vi.mock('@/lib/crypto', () => ({
@@ -31,6 +36,7 @@ vi.mock('@/lib/simplefin', () => ({
 
 import { db } from '@/lib/db'
 import { fetchAccounts, fetchTransactions } from '@/lib/simplefin'
+import { appendBalanceSnapshot } from '@/lib/snapshot'
 import { upsertTransaction, syncSimplefin } from '../../lib/sync-simplefin'
 import type { SimplefinTransaction } from '../../lib/simplefin'
 
@@ -48,6 +54,16 @@ const CHECKING_ACCOUNT = { id: 'db-acct-001', type: 'Checking' as const }
 
 const mockFetchAccounts = fetchAccounts as MockFn
 const mockFetchTransactions = fetchTransactions as MockFn
+const mockAppendBalanceSnapshot = appendBalanceSnapshot as MockFn
+
+const makeConnection = () => ({
+  id: 'conn-001',
+  encryptedAccessUrl: 'enc',
+  iv: 'iv',
+  authTag: 'tag',
+  lastSyncedAt: null,
+  firstSyncedAt: null,
+})
 
 const makeTx = (overrides: Partial<SimplefinTransaction> = {}): SimplefinTransaction => ({
   id: 'tx-001',
@@ -206,5 +222,37 @@ describe('syncSimplefin', () => {
     const call = mockDb.account.upsert.mock.calls[0][0] as { update: Record<string, unknown> }
     expect(call.update).not.toHaveProperty('name')
     expect(call.update.institution).toBe('Wells Fargo')
+  })
+
+  it('records a balance snapshot for an Investment account', async () => {
+    mockDb.simplefinConnection.findMany.mockResolvedValue([makeConnection()])
+    mockDb.simplefinConnection.update.mockResolvedValue(makeConnection())
+    // Existing account fixes the type to Investment (no inference needed).
+    mockDb.account.findUnique.mockResolvedValue({ type: 'Investment' })
+    mockFetchAccounts.mockResolvedValue([
+      { id: 'sf-inv', name: 'Brokerage', balance: '1234.56', 'balance-date': 0 },
+    ])
+    mockFetchTransactions.mockResolvedValue([])
+    mockDb.account.upsert.mockResolvedValue({ id: 'db-inv' })
+
+    await syncSimplefin()
+
+    expect(mockAppendBalanceSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockAppendBalanceSnapshot).toHaveBeenCalledWith('db-inv', 123456, expect.any(Date))
+  })
+
+  it('does NOT record a balance snapshot for a Checking account', async () => {
+    mockDb.simplefinConnection.findMany.mockResolvedValue([makeConnection()])
+    mockDb.simplefinConnection.update.mockResolvedValue(makeConnection())
+    mockDb.account.findUnique.mockResolvedValue({ type: 'Checking' })
+    mockFetchAccounts.mockResolvedValue([
+      { id: 'sf-chk', name: 'Everyday Checking', balance: '100.00', 'balance-date': 0 },
+    ])
+    mockFetchTransactions.mockResolvedValue([])
+    mockDb.account.upsert.mockResolvedValue({ id: 'db-chk' })
+
+    await syncSimplefin()
+
+    expect(mockAppendBalanceSnapshot).not.toHaveBeenCalled()
   })
 })

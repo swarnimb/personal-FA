@@ -4,6 +4,7 @@ vi.mock('@/lib/db', () => ({
   db: {
     netWorthView: { findFirst: vi.fn() },
     holding: { findMany: vi.fn() },
+    account: { groupBy: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }))
@@ -34,9 +35,10 @@ describe('GET /api/investments', () => {
       { date: '2026-04-07', valueCents: BigInt(106000) },
       { date: '2026-04-08', valueCents: BigInt(107000) },
     ]
-    vi.mocked(db.$queryRaw)
-      .mockResolvedValueOnce(historyRows)
-      .mockResolvedValueOnce([{ type: 'Investment', totalCents: BigInt(200000) }])
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce(historyRows)
+    vi.mocked(db.account.groupBy).mockResolvedValue([
+      { type: 'Investment', _sum: { currentBalanceCents: 200000 } },
+    ] as never)
     vi.mocked(db.holding.findMany).mockResolvedValue([] as never)
 
     const req = new Request('http://localhost/api/investments?range=ytd')
@@ -47,6 +49,30 @@ describe('GET /api/investments', () => {
     expect(body.data.history).toHaveLength(8)
     expect(body.data.history[0]).toEqual({ date: '2026-04-01', valueCents: 100000 })
     expect(body.data.history[7]).toEqual({ date: '2026-04-08', valueCents: 107000 })
+    // allocation sourced from live Account.currentBalanceCents via groupBy
+    expect(body.data.allocation).toEqual({ stocksCents: 200000, cryptoCents: 0 })
+  })
+
+  it('allocation: Investment → stocksCents, Crypto → cryptoCents (active only)', async () => {
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce([])
+    vi.mocked(db.account.groupBy).mockResolvedValue([
+      { type: 'Investment', _sum: { currentBalanceCents: 350000 } },
+      { type: 'Crypto', _sum: { currentBalanceCents: 75000 } },
+    ] as never)
+    vi.mocked(db.holding.findMany).mockResolvedValue([] as never)
+
+    const req = new Request('http://localhost/api/investments?range=ytd')
+    const res = await investmentsGET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.data.allocation).toEqual({ stocksCents: 350000, cryptoCents: 75000 })
+    // inactive accounts excluded via where: { isActive: true }
+    expect(db.account.groupBy).toHaveBeenCalledWith({
+      by: ['type'],
+      where: { isActive: true, type: { in: ['Investment', 'Crypto'] } },
+      _sum: { currentBalanceCents: true },
+    })
   })
 
   it('forward-fills gap days — returns 0 valueCents when no snapshots exist', async () => {
@@ -55,9 +81,9 @@ describe('GET /api/investments', () => {
       { date: '2026-04-01', valueCents: BigInt(0) },
       { date: '2026-04-02', valueCents: BigInt(0) },
     ]
-    vi.mocked(db.$queryRaw)
-      .mockResolvedValueOnce(historyRows)
-      .mockResolvedValueOnce([])
+    vi.mocked(db.$queryRaw).mockResolvedValueOnce(historyRows)
+    // No active Investment/Crypto accounts → empty groupBy → all-zero allocation
+    vi.mocked(db.account.groupBy).mockResolvedValue([] as never)
     vi.mocked(db.holding.findMany).mockResolvedValue([] as never)
 
     const req = new Request('http://localhost/api/investments?range=ytd')
