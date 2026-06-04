@@ -13,6 +13,12 @@ export interface ReviewMerchant {
   sampleDescription: string
   transactionCount: number
   isSpending: boolean
+  /** Dominant account name (most txns; tie-break by name ascending). */
+  accountName: string
+  /** AccountType of the dominant account (drives Review grouping). */
+  accountType: string
+  /** Number of distinct accounts this merchant appears on. */
+  accountCount: number
 }
 
 /**

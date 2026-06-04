@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConsentModal } from './ConsentModal'
+import { BackfillModal } from './BackfillModal'
 
 type AISettingsState = {
   enabled: boolean
@@ -28,6 +29,15 @@ export function AISettingsForm({ initialState }: { initialState: AISettingsState
   const [consentOpen, setConsentOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [backfillOpen, setBackfillOpen] = useState(false)
+  const [estimate, setEstimate] = useState<{
+    estimatedMerchantCount: number
+    estimatedCostCents: number
+  } | null>(null)
+  const [backfillPhase, setBackfillPhase] = useState<
+    'idle' | 'estimating' | 'running' | 'done' | 'error'
+  >('idle')
+  const [backfillMsg, setBackfillMsg] = useState('')
 
   // Shared request helper for POST/DELETE. Returns whether the call succeeded
   // and updates local state from the safe (key-free) response shape.
@@ -86,6 +96,73 @@ export function AISettingsForm({ initialState }: { initialState: AISettingsState
       return
     }
     await post({ monthlyCapCents: cents })
+  }
+
+  // Pre-flight: fetch the cost estimate (GET), then open the confirm modal.
+  const handleBackfillClick = async () => {
+    setBackfillPhase('estimating')
+    setBackfillMsg('')
+    try {
+      const res = await fetch('/api/settings/ai/backfill')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not estimate cost')
+      setEstimate({
+        estimatedMerchantCount: json.estimatedMerchantCount,
+        estimatedCostCents: json.estimatedCostCents,
+      })
+      setBackfillOpen(true)
+      setBackfillPhase('idle')
+    } catch (err) {
+      setBackfillPhase('error')
+      setBackfillMsg(err instanceof Error ? err.message : 'Could not estimate cost')
+    }
+  }
+
+  // Confirm: POST to start the run, then poll /api/sync/status for OUR run by id
+  // until it reaches a terminal status (success/partial/failed) or attempts run out.
+  const handleBackfillConfirm = async () => {
+    setBackfillPhase('running')
+    setBackfillOpen(false)
+    try {
+      const res = await fetch('/api/settings/ai/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: true }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not start categorization')
+      const syncLogId: string = json.syncLogId
+
+      for (let attempt = 0; attempt < 90; attempt++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const statusRes = await fetch('/api/sync/status')
+        const statusJson = await statusRes.json()
+        const data = statusJson.data as
+          | { id: string; status: string; transactionsUpdated: number }
+          | null
+
+        // Wait until our run is the latest row AND no longer running.
+        if (!data || data.id !== syncLogId || data.status === 'running') continue
+
+        if (data.status === 'success' || data.status === 'partial') {
+          setBackfillPhase('done')
+          setBackfillMsg(
+            `Categorized ${data.transactionsUpdated} merchants. Open Review to finish assigning categories.`,
+          )
+          return
+        }
+        if (data.status === 'failed') {
+          setBackfillPhase('error')
+          setBackfillMsg('Categorization failed. Check the Review page or try again.')
+          return
+        }
+      }
+      setBackfillPhase('error')
+      setBackfillMsg('Still running — check the Review page in a minute.')
+    } catch (err) {
+      setBackfillPhase('error')
+      setBackfillMsg(err instanceof Error ? err.message : 'Could not start categorization')
+    }
   }
 
   return (
@@ -172,22 +249,46 @@ export function AISettingsForm({ initialState }: { initialState: AISettingsState
         </p>
       </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        disabled
-        aria-label="Categorize existing transactions with AI"
-        title="Available after AI is enabled"
-        className="self-start"
-      >
-        Categorize existing transactions with AI
-      </Button>
+      <div className="flex flex-col gap-2 self-start">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!state.enabled || busy || backfillPhase === 'running' || backfillPhase === 'estimating'}
+          title={!state.enabled ? 'Enable AI categorization first' : undefined}
+          aria-label="Categorize existing transactions with AI"
+          onClick={handleBackfillClick}
+        >
+          Categorize existing transactions with AI
+        </Button>
+        {backfillPhase === 'estimating' && (
+          <p className="font-inter text-xs text-on-surface-variant">Estimating…</p>
+        )}
+        {backfillPhase === 'running' && (
+          <p className="font-inter text-xs text-on-surface-variant">
+            Categorizing… this can take a minute.
+          </p>
+        )}
+        {backfillPhase === 'done' && (
+          <p className="font-inter text-xs text-on-surface-variant">{backfillMsg}</p>
+        )}
+        {backfillPhase === 'error' && (
+          <p className="font-inter text-xs text-tertiary">{backfillMsg}</p>
+        )}
+      </div>
 
       <ConsentModal
         open={consentOpen}
         onOpenChange={setConsentOpen}
         onConfirm={handleConsentConfirm}
         isSubmitting={busy}
+      />
+
+      <BackfillModal
+        open={backfillOpen}
+        onOpenChange={setBackfillOpen}
+        estimate={estimate}
+        onConfirm={handleBackfillConfirm}
+        isSubmitting={backfillPhase === 'running'}
       />
     </div>
   )

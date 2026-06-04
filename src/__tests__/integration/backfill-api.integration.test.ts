@@ -75,15 +75,16 @@ vi.mock('@/lib/review-apply', () => ({
 const createSyncLogSpy = vi.fn()
 vi.mock('@/lib/sync', () => ({ createSyncLog: () => createSyncLogSpy() }))
 
-// Demo guard off for route tests.
+// Demo guard off for route tests (spy so individual tests can flip it on).
+const isDemoModeSpy = vi.fn(() => false)
 vi.mock('@/lib/api-demo-guard', () => ({
-  isDemoMode: () => false,
+  isDemoMode: () => isDemoModeSpy(),
   demoNotFound: () => Response.json({ error: 'demo mode' }, { status: 404 }),
 }))
 
 import { BudgetExceededError } from '@/lib/anthropic'
 import { runBackfillCategorization } from '@/lib/backfill-categorization'
-import { POST } from '@/app/api/settings/ai/backfill/route'
+import { GET, POST } from '@/app/api/settings/ai/backfill/route'
 
 /** Builds an UncategorizedMerchant-shaped row. */
 function merchant(name: string, isSpending = true) {
@@ -120,6 +121,7 @@ beforeEach(() => {
   isAIAvailableSpy.mockResolvedValue({ enabled: true })
   estimateBatchCostSpy.mockImplementation((n: number) => Promise.resolve(Math.ceil(n * 0.5)))
   createSyncLogSpy.mockResolvedValue('log-1')
+  isDemoModeSpy.mockReturnValue(false)
 })
 
 describe('POST /api/settings/ai/backfill — boundary (SEC-02)', () => {
@@ -157,6 +159,33 @@ describe('POST /api/settings/ai/backfill — boundary (SEC-02)', () => {
     expect(body.estimatedMerchantCount).toBe(2)
     expect(body.estimatedCostCents).toBe(1) // ceil(2 * 0.5)
     expect(elapsed).toBeLessThan(100)
+  })
+})
+
+describe('GET /api/settings/ai/backfill — pre-flight estimate (T85/T86)', () => {
+  it('returns { estimatedMerchantCount, estimatedCostCents } without starting a run', async () => {
+    getUncategorizedMerchantsSpy.mockResolvedValue([merchant('a'), merchant('b'), merchant('c')])
+
+    const res = await GET()
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(typeof body.estimatedMerchantCount).toBe('number')
+    expect(typeof body.estimatedCostCents).toBe('number')
+    expect(body.estimatedMerchantCount).toBe(3)
+    expect(body.estimatedCostCents).toBe(2) // ceil(3 * 0.5)
+    // Pure estimate: no SyncLog created, no run kicked off.
+    expect(createSyncLogSpy).not.toHaveBeenCalled()
+    expect(categorizeMerchantsSpy).not.toHaveBeenCalled()
+  })
+
+  it('is demo-gated: returns the demo 404 when isDemoMode() is true', async () => {
+    isDemoModeSpy.mockReturnValue(true)
+
+    const res = await GET()
+
+    expect(res.status).toBe(404)
+    expect(estimateBatchCostSpy).not.toHaveBeenCalled()
   })
 })
 

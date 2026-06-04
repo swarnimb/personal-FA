@@ -1,5 +1,7 @@
+import { connection } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentMonthSpend } from '@/lib/anthropic'
+import { isDemoMode } from '@/lib/demo-mode'
 import { AISettingsForm } from './AISettingsForm'
 
 const APP_SETTINGS_SINGLETON_ID = 'singleton'
@@ -14,6 +16,11 @@ const APP_SETTINGS_SINGLETON_ID = 'singleton'
  * boundary, so the key value can never reach the browser.
  */
 export default async function SettingsPage() {
+  // Real app: render per-request so AI-enabled state + month spend reflect live
+  // DB values (no searchParams/cookies here, so Next would otherwise statically
+  // freeze them at build time). Demo build (`output: 'export'`) skips this.
+  if (!isDemoMode()) await connection()
+
   const settings = await db.appSettings.upsert({
     where: { id: APP_SETTINGS_SINGLETON_ID },
     create: { id: APP_SETTINGS_SINGLETON_ID },

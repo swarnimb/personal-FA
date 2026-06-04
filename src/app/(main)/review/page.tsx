@@ -1,3 +1,4 @@
+import { connection } from 'next/server'
 import { db } from '@/lib/db'
 import { getUncategorizedMerchants } from '@/lib/review-queries'
 import { isAIAvailable } from '@/lib/anthropic'
@@ -17,6 +18,12 @@ const APP_SETTINGS_SINGLETON_ID = 'singleton'
  * Boundary preservation), so the Pre-fill action and privacy banner never mount.
  */
 export default async function ReviewPage() {
+  // Real app: render per-request so the queue reflects live DB state (this page
+  // reads no searchParams/cookies, so Next would otherwise statically optimize
+  // it and freeze the queue at build time). Demo build (`output: 'export'`)
+  // skips this and stays statically exportable.
+  if (!isDemoMode()) await connection()
+
   const merchants = await getUncategorizedMerchants()
   const aiEnabled = isDemoMode() ? false : (await isAIAvailable()).enabled
 

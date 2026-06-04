@@ -30,6 +30,9 @@ const MERCHANTS: ReviewMerchant[] = [
     sampleDescription: 'STARBUCKS #1234',
     transactionCount: 3,
     isSpending: true,
+    accountName: 'Chase Checking',
+    accountType: 'Checking',
+    accountCount: 1,
   },
   {
     normalizedMerchant: 'whole foods mkt',
@@ -37,6 +40,9 @@ const MERCHANTS: ReviewMerchant[] = [
     sampleDescription: 'WHOLE FOODS MKT',
     transactionCount: 1,
     isSpending: true,
+    accountName: 'Chase Checking',
+    accountType: 'Checking',
+    accountCount: 1,
   },
 ]
 
@@ -65,6 +71,45 @@ describe('ReviewTable rendering', () => {
     expect(screen.getByText('Whole Foods Mkt')).toBeInTheDocument()
     // Transaction count is shown.
     expect(screen.getByText('3')).toBeInTheDocument()
+  })
+
+  it('groups merchants by kind heading then account subheading (T-grouping)', () => {
+    renderTable({
+      merchants: [
+        {
+          normalizedMerchant: 'amex payment',
+          displayMerchant: 'Amex Payment',
+          sampleDescription: 'AMEX PAYMENT',
+          transactionCount: 2,
+          isSpending: true,
+          accountName: 'Amex Gold',
+          accountType: 'CreditCard',
+          accountCount: 1,
+        },
+        {
+          normalizedMerchant: 'starbucks',
+          displayMerchant: 'Starbucks #1234',
+          sampleDescription: 'STARBUCKS #1234',
+          transactionCount: 3,
+          isSpending: true,
+          accountName: 'Chase Checking',
+          accountType: 'Checking',
+          accountCount: 1,
+        },
+      ],
+    })
+    // Top-level kind headings render in REVIEW_GROUPS order (Cash before Credit Cards).
+    expect(screen.getByRole('heading', { name: 'Cash' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Credit Cards' })).toBeInTheDocument()
+    // Loans/Other have no rows → their headings are omitted.
+    expect(screen.queryByRole('heading', { name: 'Loans' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Other' })).toBeNull()
+    // Account subheadings render under their kind.
+    expect(screen.getByText('Chase Checking')).toBeInTheDocument()
+    expect(screen.getByText('Amex Gold')).toBeInTheDocument()
+    // Both merchants still render exactly once.
+    expect(screen.getByText('Starbucks #1234')).toBeInTheDocument()
+    expect(screen.getByText('Amex Payment')).toBeInTheDocument()
   })
 
   it('shows an empty-state message when there are zero uncategorized merchants', () => {

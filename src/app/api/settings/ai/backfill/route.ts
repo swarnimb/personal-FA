@@ -25,6 +25,29 @@ import { isDemoMode, demoNotFound } from '@/lib/api-demo-guard'
 const backfillBodySchema = z.object({ confirmed: z.literal(true) })
 
 /**
+ * `GET /api/settings/ai/backfill` — pre-flight cost estimate (T85/T86).
+ *
+ * Demo-gated first. Computes the same estimate the POST returns (distinct
+ * uncategorized merchant count + estimated cost in cents over the batches the
+ * run would issue) WITHOUT creating a `SyncLog` or starting a run, so the UI can
+ * show the cost in the confirm modal before the user commits.
+ *
+ * @returns 200 with `{ estimatedMerchantCount, estimatedCostCents }`, or 500 on
+ *   an estimate failure.
+ */
+export async function GET(): Promise<Response> {
+  if (isDemoMode()) return demoNotFound()
+
+  try {
+    const { estimatedMerchantCount, estimatedCostCents } = await estimateBackfill(estimateBatchCost)
+    return Response.json({ estimatedMerchantCount, estimatedCostCents })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return Response.json({ error: `Backfill estimate failed: ${message}` }, { status: 500 })
+  }
+}
+
+/**
  * `POST /api/settings/ai/backfill` — start an AI backfill run.
  *
  * Demo-gated first. Validates `{ confirmed: true }`, computes the pre-flight

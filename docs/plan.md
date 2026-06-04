@@ -102,8 +102,8 @@
 | 89 | V1.1 Phase 2 — Review page UI (ReviewTable + Pre-fill + Apply all) | [x] |
 | 90 | V1.1 Phase 2 — Dashboard CategorizationReviewBanner + Sidebar badge | [x] |
 | 91 | V1.1 Phase 2 — LLM error handling + edge-case banners | [x] |
-| 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [ ] |
-| 93 | V1.1 Phase 2 — SECURITY.md AI Categorization section | [ ] |
+| 92 | V1.1 Phase 2 — Spending tab retroactive MerchantRule prompt on edit | [x] |
+| 93 | V1.1 Phase 2 — SECURITY.md AI Categorization section | [x] |
 | 94 | V1.1 Phase 2 — E2E validation against real `amibroke` DB | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
@@ -3390,7 +3390,7 @@ model AppSettings {
 - [ ] AC: dividend transactions on investment accounts still classify as "Interest & Dividends" (keyword Step 2 wins over investment-filter Step 3) — verify with a known dividend transaction
 - [ ] AC: Spending tab Transfer Out exclusion (CONSTRAINT-15) still in effect — investment internal transactions don't appear in Spending breakdown
 - [ ] AC: PRD §15 Success Metric verified: "Every uncategorized transaction has a clear, working path to categorization on the Review screen"
-- [ ] AC: no regressions in test suite (currently 256/256; T80–T92 should add ~40+ tests; final count expected ~296+/296+ green)
+- [ ] AC: no regressions in test suite (post-Session-38 baseline: 342/342 unit + 88/88 integration green, `tsc` clean) — final count should be at or above this baseline
 - [ ] AC: `tsc` clean; `npm run build` succeeds; `npm audit` baseline unchanged (still 2 Moderates per FB-17 monitoring stance)
 - [ ] AC: builder reports privacy disclosure modal appeared correctly on first AI toggle-on
 - [ ] AC: builder reports persistent privacy banner visible on Review screen while AI is on

@@ -18,7 +18,7 @@ type Row = {
   category: string
   categoryOverridden: boolean
   date: Date
-  account: { type: AccountType }
+  account: { name: string; type: AccountType }
 }
 
 // Mutable store shared across the mocked Prisma calls within a test.
@@ -48,7 +48,11 @@ const findManySpy = vi.fn(async (args: FindManyArgs) => {
         !excluded.has(r.account.type),
     )
     .sort((a, b) => b.date.getTime() - a.date.getTime())
-    .map((r) => ({ merchant: r.merchant, amountCents: r.amountCents }))
+    .map((r) => ({
+      merchant: r.merchant,
+      amountCents: r.amountCents,
+      account: { name: r.account.name, type: r.account.type },
+    }))
 })
 
 vi.mock('@/lib/db', () => ({
@@ -64,7 +68,7 @@ function tx(overrides: Partial<Row> & { merchant: string }): Row {
     category: 'Uncategorized',
     categoryOverridden: false,
     date: new Date(Date.UTC(2026, 4, 1)),
-    account: { type: 'Checking' },
+    account: { name: 'Chase Checking', type: 'Checking' },
     ...overrides,
   }
 }
@@ -90,8 +94,8 @@ describe('getUncategorizedMerchants', () => {
 
   it('excludes Investment-account transactions', async () => {
     store = [
-      tx({ merchant: 'VANGUARD BUY', account: { type: 'Investment' } }),
-      tx({ merchant: 'WHOLE FOODS MKT', account: { type: 'Checking' } }),
+      tx({ merchant: 'VANGUARD BUY', account: { name: 'Vanguard', type: 'Investment' } }),
+      tx({ merchant: 'WHOLE FOODS MKT', account: { name: 'Chase Checking', type: 'Checking' } }),
     ]
     const result = await getUncategorizedMerchants()
     expect(result).toHaveLength(1)
@@ -100,8 +104,8 @@ describe('getUncategorizedMerchants', () => {
 
   it('excludes Crypto-account transactions', async () => {
     store = [
-      tx({ merchant: 'COINBASE BUY', account: { type: 'Crypto' } }),
-      tx({ merchant: 'WHOLE FOODS MKT', account: { type: 'Checking' } }),
+      tx({ merchant: 'COINBASE BUY', account: { name: 'Coinbase', type: 'Crypto' } }),
+      tx({ merchant: 'WHOLE FOODS MKT', account: { name: 'Chase Checking', type: 'Checking' } }),
     ]
     const result = await getUncategorizedMerchants()
     expect(result).toHaveLength(1)
@@ -160,6 +164,39 @@ describe('getUncategorizedMerchants', () => {
     expect(result[0].displayMerchant).toBe('Starbucks Store #2002')
   })
 
+  it('files a merchant under its dominant account and counts distinct accounts', async () => {
+    // Same normalized merchant on two accounts: 3 on Chase Checking (Checking),
+    // 1 on Amex (CreditCard) → dominant = Chase Checking, accountCount = 2.
+    store = [
+      tx({ merchant: 'AMAZON #1001', account: { name: 'Chase Checking', type: 'Checking' } }),
+      tx({ merchant: 'AMAZON #1002', account: { name: 'Chase Checking', type: 'Checking' } }),
+      tx({ merchant: 'AMAZON #1003', account: { name: 'Chase Checking', type: 'Checking' } }),
+      tx({ merchant: 'AMAZON #1004', account: { name: 'Amex', type: 'CreditCard' } }),
+    ]
+    const result = await getUncategorizedMerchants()
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      normalizedMerchant: 'amazon',
+      transactionCount: 4,
+      accountName: 'Chase Checking',
+      accountType: 'Checking',
+      accountCount: 2,
+    })
+  })
+
+  it('breaks a dominant-account tie by account name ascending (deterministic)', async () => {
+    // 1 txn each on "Zelle Bank" and "Ally" → tie → name ascending picks "Ally".
+    store = [
+      tx({ merchant: 'NETFLIX #1001', account: { name: 'Zelle Bank', type: 'Checking' } }),
+      tx({ merchant: 'NETFLIX #1002', account: { name: 'Ally', type: 'Savings' } }),
+    ]
+    const result = await getUncategorizedMerchants()
+    expect(result).toHaveLength(1)
+    expect(result[0].accountName).toBe('Ally')
+    expect(result[0].accountType).toBe('Savings')
+    expect(result[0].accountCount).toBe(2)
+  })
+
   it('throws a LOUD ReviewQueryError when the DB query fails (EH-01)', async () => {
     findManySpy.mockRejectedValueOnce(new Error('connection refused'))
     await expect(getUncategorizedMerchants()).rejects.toThrowError(/Review query failed.*connection refused/)
@@ -201,6 +238,9 @@ describe('GET /api/review/uncategorized', () => {
       sampleDescription: 'STARBUCKS #1234',
       transactionCount: 1,
       isSpending: true,
+      accountName: 'Chase Checking',
+      accountType: 'Checking',
+      accountCount: 1,
     })
   })
 
