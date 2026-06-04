@@ -1,8 +1,50 @@
 # QA Report: AmIBroke Finance Tracker
 
-**Date:** 2026-06-04 (latest pass — Task 94, V1.1 Phase 2 AI-Assisted Categorization)
+**Date:** 2026-06-04 (latest pass — Task 95, Account balance "As of" timestamp; see section immediately below)
 **Status:** APPROVED
 (The 2 builder-observation ACs — privacy modal + privacy banner — are now resolved/confirmed live (Session 40); 1 accepted non-blocking exception: 3 blank-merchant Loan txns. See "Task 94" section immediately below for authoritative current state. All prior sections retained as historical record below.)
+
+---
+
+# Task 95 — Account balance "As of" timestamp QA
+
+**Date:** 2026-06-04
+**Status:** APPROVED
+**Scope:** Single commit on `feat/t95-account-as-of-timestamp` (`git diff main...feat/t95-account-as-of-timestamp`). Assessed against Task 95 ACs (`docs/plan.md`) and PRD §7.1. Suites not re-run — orchestrator confirmed tsc clean, 372 unit + 92 integration green.
+
+> **Method:** Code-and-correctness review of the diff: `prisma/schema.prisma`, migration `20260604120000_add_account_balance_as_of`, `src/lib/sync-simplefin.ts` (`upsertAccount`), `src/lib/format.ts` (`formatAsOf`), `src/app/(main)/accounts/page.tsx` (`toCard`), `src/components/accounts/ConnectedInstitutions.tsx` (`AccountRow`), and the new/updated tests. Browser walk not performed (builder live-check pending — non-blocking, see below).
+
+## AC Verification
+
+- [PASS] `balanceAsOf DateTime?` added to `Account` (schema.prisma:81). Migration is a single additive nullable `ALTER TABLE ... ADD COLUMN` — existing rows stay NULL, zero data risk.
+- [PASS] `upsertAccount` persists `balance-date`×1000 in BOTH `create` and `update` (sync-simplefin.ts:57-81). Guard `typeof === 'number' && Number.isFinite(...)` → malformed/missing feed yields `null`, never throws. `lastSyncedAt` untouched.
+- [PASS] `toCard()` precedence `balanceAsOf ?? lastSyncedAt ?? updatedAt` resolved server-side, emits single `asOf` string|null (page.tsx:29).
+- [PASS] Card renders "As of <time>" only when `acc.asOf` truthy; `suppressHydrationWarning` present; `text-on-surface-variant` muted token; no border — CONSTRAINT-05 satisfied (ConnectedInstitutions.tsx:219-228).
+- [PASS] `formatAsOf` hybrid: <1m "Just now", <60m "Nm ago", <24h "Nh ago", else absolute via native `Intl.DateTimeFormat` (format.ts). Null handled at JSX guard → renders nothing, never "Invalid date".
+- [PASS] Docs updated: `docs/data-model.md` (balanceAsOf row), `docs/architecture.md` (freshness note + file annotation), plan.md + prd.md §7.1.
+
+## Coverage Assessment
+
+**Critical path (data write — sync upsert):** PASS. Two new sync tests: persists `balanceAsOf` from `balance-date` on create+update (happy), and missing `balance-date` → `null` with `errors: []`, `accountsSynced: 1`, no throw (error case).
+
+**Format helper:** PASS. Four tests cover Just now / Nm / Nh (relative) + 2-days absolute branch.
+
+**Absolute-branch robustness (specifically reviewed):** ROBUST and timezone-independent. The relative-vs-absolute decision is pure millisecond math (`diffHr < 24`), independent of TZ. The test asserts `.not.toContain('ago')` + `/\w{3} \d+,/` (the "Mon D," shape that `{month:'short',day:'numeric'}` always produces) rather than a literal date — so it cannot flake when the runner's TZ shifts the rendered calendar day. Correct call.
+
+## Edge Cases
+
+- Future date (negative diff, clock skew) → falls through to "Just now". Benign, no crash.
+- `SimplefinAccount['balance-date']` is typed `number` (non-optional) in simplefin.ts; the missing-field test casts the mock. Runtime guard remains the real protection if a live feed omits/garbles the field. Defensible.
+
+## Findings
+
+### NON-BLOCKING — Live visual check pending
+**What:** Browser walk of `/accounts` (relative + absolute display across SimpleFin / crypto / manual cards, alignment of the muted line) not yet performed; plan.md lists it as pending. **Impact:** styling/layout regressions on the card are not machine-verified; logic + token usage are confirmed correct in code. **Recommendation:** builder eyeballs `/accounts` once; not a release blocker.
+
+## Summary
+
+**Blocking:** 0 **Non-blocking:** 1
+**Verdict:** APPROVED — all ACs met; migration is additive/safe; required tests present and the absolute branch is timezone-robust. `formatAsOf` ~14 lines (well under 50). One non-blocking live-visual follow-up.
 
 ---
 
