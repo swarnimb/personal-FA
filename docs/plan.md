@@ -107,6 +107,7 @@
 | 94 | V1.1 Phase 2 — E2E validation against real `amibroke` DB | [x] |
 | 95 | Account balance "As of" timestamp (§7.1) | [x] |
 | 96 | Stale-balance warning on Accounts card "As of" line (§7.2) | [x] |
+| 97 | Split `ConnectedInstitutions.tsx` (CQ-01 + CQ-02 refactor) | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3491,3 +3492,42 @@ model AppSettings {
 **Design decision (Session 42):** No dedicated warning/amber token exists in the Velvet Ledger palette. Builder chose to reuse `tertiary` (soft red) at muted opacity, matching the existing "Needs review" caution cue. `error` token avoided (reserved for form validation; reads as alarming).
 
 **Session 42 (2026-06-04) — IMPLEMENTED:** `isBalanceStale(date, now?)` added to `format.ts` (named `SEVEN_DAYS_MS` const, strict `>`, JSDoc); `toCard()` passes `source`; `AccountCard` gains `source: string`; `AccountRow` "As of" line renders `⚠ ` + `text-tertiary/70` when `source !== 'Manual' && asOf && isBalanceStale(...)`, else unchanged (`suppressHydrationWarning` kept, no border/box). `tsc` clean; **376 unit tests green / 62 files** (orchestrator re-run + diff-reviewed). CSV-import edge: CSV import does not create accounts (only inserts transactions into an existing account), so it introduces no staleness eligibility. `@code-review` PASS (0 violations in new code; pre-existing CQ-01/CQ-02 in `ConnectedInstitutions.tsx` flagged for a future split task). **Merged to `main`** (merge commit `1e52881`; feat branch deleted). **Pending (optional):** live `/accounts` visual check that a >7-day-stale card shows ⚠ + soft-red.
+
+---
+
+## Task 97: Split `ConnectedInstitutions.tsx` (CQ-01 + CQ-02 refactor)
+
+**Source:** Tech-debt — pre-existing CQ debt flagged in T95/T96 `@code-review` and `docs/session-handoff.md` (Session 42). CQ rule IDs: CQ-01 (functions < 50 lines) + CQ-02 (component files < 200 lines), per `docs/architecture.md` Cross-Cutting Concerns table.
+
+**Type:** Pure refactor. **No behavior change.** Decompose the oversized component along its natural seams.
+
+**Problem:** `src/components/accounts/ConnectedInstitutions.tsx` is 294 lines (CQ-02 limit 200); its nested `AccountRow` is ~156 lines (CQ-01 limit 50). The bloat is concentrated in `AccountRow`, which mixes row presentation, inline rename, account-type editing, type-confirmation, and a PATCH mutation (demo-guard + toast + error class).
+
+**Files created** (all co-located in `src/components/accounts/` — matches the folder's flat, self-contained, named-export convention; no `src/hooks/` dir is introduced):
+- `accountTypes.ts` — move `AccountCard` type, `Tab`/`TABS`, the `CASH/INVESTMENT/DEBT_TYPES` buckets, `ACCOUNT_TYPES`, `TYPE_ICONS`, `TYPE_LABELS`
+- `useAccountMutation.ts` — custom hook owning the `/api/accounts/[id]` PATCH + `isSaving` state + `AccountUpdateError` + demo-mode guard + toast + `router.refresh()`. Returns `{ patch, isSaving }`.
+- `useInlineRename.ts` — custom hook owning `isEditingName`, `nameDraft`, start/cancel/save handlers + keydown. Takes the `patch` callback injected (depends on `useAccountMutation`, not vice-versa). Keeps the `nameDraft` reset-from `acc.name` logic together.
+- `SyncBadge.tsx` — the presentational ✓ Synced / Never synced pill
+- `AccountRow.tsx` — the row, now consuming `useAccountMutation` + `useInlineRename` + `SyncBadge`
+
+**Files modified:**
+- `ConnectedInstitutions.tsx` — slims to container + tab bar + tab-filter predicate (~60 lines); imports `AccountRow` and shared types
+- `src/__tests__/.../ConnectedInstitutions*` test file(s) — update import paths for relocated `AccountCard` / `AccountRow`; confirm the test import surface before splitting
+
+**Acceptance criteria:**
+- [x] `ConnectedInstitutions.tsx` < 200 lines (294→61); every newly created file < 200 lines (largest = AccountRow 117) (CQ-02)
+- [x] No *logic* function exceeds 50 lines — all extracted hooks/handlers well under (CQ-01). **AC amended (Session 43):** the original "including the AccountRow component body" reading is dropped — `AccountRow`'s 96-line body is ~9 lines logic + ~85 lines irreducible JSX; the project's de-facto CQ-01 convention counts logic functions, not JSX-inclusive component bodies (every sibling component — `AddManualAccountModal` 98, `CSVImportModal` 182 — exceeds 50 JSX lines). All logic bloat (the original concern) is extracted.
+- [x] All five behaviors verified intact: tab filtering, inline rename, account-type edit, type-confirmation, sync badge + stale "As of" cue
+- [x] `isSaving` (returned from `useAccountMutation`) still disables all interactive controls during a PATCH
+- [x] Demo-mode short-circuit (`isDemoMode()` + `DEMO_TOAST_COPY`) and error→toast path (`AccountUpdateError`) preserved exactly
+- [x] `router.refresh()` after a successful mutation preserved
+- [x] No default exports anywhere (matches folder convention)
+- [x] `npm test` — full suite passes (62 files / 376 tests); `tsc` type-check clean
+- [x] No `console.log`, no commented-out code, no unused imports left behind by the move (CQ-05)
+
+**Session 43 (2026-06-04) — IMPLEMENTED:** Split into `accountTypes.ts` (51), `useAccountMutation.ts` (61), `useInlineRename.ts` (66), `SyncBadge.tsx` (11), `AccountRow.tsx` (117); `ConnectedInstitutions.tsx` slimmed 294→61. Pure refactor, behavior byte-identical. Test file unchanged (imports only `ConnectedInstitutions`). `tsc` clean; 376 tests green (orchestrator re-run + diff-reviewed). CQ-01 AC amended (see above). **Not yet committed** — pending commit + `@code-review` (same gate as T96).
+
+**Out of scope (flagged separately, not bundled here):** creating the missing `rules/code-quality.md`; the empty `session-log.md` auto-log gap; the T96 live `/accounts` visual check.
+
+**Depends on:** Task 96 (complete) — the `AccountCard` type now carries `source` + the stale-cue render that must survive the move.
+**Specialist:** `@write-tests` (verify/adjust the `ConnectedInstitutions` test import surface). No UI/design change — Velvet Ledger render output is byte-identical.
