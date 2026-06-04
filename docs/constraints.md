@@ -230,6 +230,18 @@
 
 ---
 
+### CONSTRAINT-19: CQ-01 (functions < 50 lines) applies to logic functions/handlers, not JSX-inclusive component render bodies
+
+**Decision:** The CQ-01 "functions under 50 lines" rule is measured against logic — handlers, hooks, pure functions, computed bodies — not against a React component's JSX-inclusive render body. A component whose body exceeds 50 lines purely because of markup is compliant, provided its extractable logic has already been moved out (into hooks/helpers) and what remains is irreducible JSX. CQ-02 (component *files* < 200 lines) is unchanged and still measured on whole-file length.
+
+**What it means in practice:** When `@dev` self-checks or `@code-review` runs CQ-01, count the logic, not the markup. A 96-line `AccountRow` that is ~9 lines of logic + ~85 lines of JSX passes; a 60-line function that is all branching logic fails. The remedy for an over-long component is to extract logic first (hooks/helpers), and only split JSX into sub-components when that genuinely aids readability — never to satisfy a line count.
+
+**Who decided and when:** Session 43 / T97 refactor, builder approved 2026-06-04. Codifies the de-facto convention already present across `src/components/` (every component exceeds 50 JSX-inclusive lines).
+
+**What this closes off:** Prevents future "fix" churn that fragments components into artificial presentational sub-units purely to chase a line count, and prevents CQ-01 from being cited as a blocker against markup-heavy-but-logic-thin components. Does not relax CQ-01 for real logic — a long logic function is still a violation.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -252,3 +264,4 @@
 | 16 | LLM prompts contain only normalized merchant strings | No transaction fields ever appear in prompts; integration test enforces the denylist | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |
 | 17 | LLM responses validated against allowed-values list | Out-of-list responses dropped with LOUD log, never accepted as data | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |
 | 18 | Investment/Crypto value from live `Account` balance; daily `BalanceSnapshot` for history only | Value/allocation read `currentBalanceCents`, never aggregate snapshots; sync writes one snapshot/day/account for the history chart | Session 39 / builder | 2026-06-04 |
+| 19 | CQ-01 measured on logic, not JSX render bodies | Extract logic to pass CQ-01; don't fragment JSX for line count | Session 43 / T97 / builder | 2026-06-04 |
