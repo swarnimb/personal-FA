@@ -3525,7 +3525,7 @@ model AppSettings {
 - [x] `npm test` — full suite passes (62 files / 376 tests); `tsc` type-check clean
 - [x] No `console.log`, no commented-out code, no unused imports left behind by the move (CQ-05)
 
-**Session 43 (2026-06-04) — IMPLEMENTED:** Split into `accountTypes.ts` (51), `useAccountMutation.ts` (61), `useInlineRename.ts` (66), `SyncBadge.tsx` (11), `AccountRow.tsx` (117); `ConnectedInstitutions.tsx` slimmed 294→61. Pure refactor, behavior byte-identical. Test file unchanged (imports only `ConnectedInstitutions`). `tsc` clean; 376 tests green (orchestrator re-run + diff-reviewed). CQ-01 AC amended (see above). **Not yet committed** — pending commit + `@code-review` (same gate as T96).
+**Session 43 (2026-06-04) — IMPLEMENTED:** Split into `accountTypes.ts` (51), `useAccountMutation.ts` (61), `useInlineRename.ts` (66), `SyncBadge.tsx` (11), `AccountRow.tsx` (117); `ConnectedInstitutions.tsx` slimmed 294→61. Pure refactor, behavior byte-identical. Test file unchanged (imports only `ConnectedInstitutions`). `tsc` clean; 376 tests green (orchestrator re-run + diff-reviewed). CQ-01 AC amended (see above). `@code-review` **PASS** (security/EH/CQ/testing/docs/architecture/prod-build all PASS; notes: optional hook unit tests per TS-01, missing `rules/*.md` files). **Merged to `main`** locally (commit `eed6c8c`, merge `74b5420`; feat branch deleted). Unpushed — GitHub auth still down (Session 42 handoff).
 
 **Out of scope (flagged separately, not bundled here):** creating the missing `rules/code-quality.md`; the empty `session-log.md` auto-log gap; the T96 live `/accounts` visual check.
 
