@@ -31,6 +31,21 @@ export const ALL_CATEGORIES: string[] = [
   'Uncategorized',
 ]
 
+/** Catch-all categories pinned to the bottom of selectable lists. */
+const OTHER_CATEGORIES = ['Other', 'Other Income']
+
+/**
+ * Categories for UI pickers: every selectable category sorted alphabetically,
+ * with the catch-all 'Other'/'Other Income' pinned to the bottom so the generic
+ * buckets don't hide mid-list. Excludes 'Uncategorized' (assigning it is a no-op).
+ */
+export const SELECTABLE_CATEGORIES_SORTED: string[] = [
+  ...ALL_CATEGORIES
+    .filter((c) => c !== 'Uncategorized' && !OTHER_CATEGORIES.includes(c))
+    .sort((a, b) => a.localeCompare(b)),
+  ...OTHER_CATEGORIES,
+]
+
 /**
  * Categories excluded from the Spending view: income (inflows) + Transfer Out
  * (internal movement to other owned accounts: CC payoffs, investment

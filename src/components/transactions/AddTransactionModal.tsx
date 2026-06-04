@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ALL_CATEGORIES } from '@/lib/categories'
+import { SELECTABLE_CATEGORIES_SORTED } from '@/lib/categories'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
 
@@ -18,7 +18,6 @@ type FormState = {
 
 const TODAY = new Date().toISOString().split('T')[0]
 const FREQUENCIES = ['weekly', 'monthly', 'yearly'] as const
-const SELECTABLE_CATEGORIES = ALL_CATEGORIES.filter((c) => c !== 'Uncategorized')
 const DEFAULT: FormState = {
   date: TODAY, amountStr: '', isPositive: false, merchant: '',
   category: '', accountId: '', notes: '', isRecurring: false, frequency: '',
@@ -146,7 +145,7 @@ export function AddTransactionModal({
               <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
-              {SELECTABLE_CATEGORIES.map((c) => (
+              {SELECTABLE_CATEGORIES_SORTED.map((c) => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>

@@ -7,15 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ALL_CATEGORIES } from '@/lib/categories'
-
-/**
- * Categories a user may assign on the Review screen. Sourced from the canonical
- * `ALL_CATEGORIES` (CONSTRAINT-17 — the user can never pick a category outside
- * the single source of truth in `src/lib/categories.ts`). `Uncategorized` is
- * excluded because assigning it is a no-op (the row is already uncategorized).
- */
-const SELECTABLE_CATEGORIES = ALL_CATEGORIES.filter((c) => c !== 'Uncategorized')
+import { SELECTABLE_CATEGORIES_SORTED } from '@/lib/categories'
 
 /**
  * Reusable category picker for one Review row. Controlled: the parent owns the
@@ -41,7 +33,7 @@ export function CategoryDropdown({
         <SelectValue placeholder="Choose category…" />
       </SelectTrigger>
       <SelectContent>
-        {SELECTABLE_CATEGORIES.map((c) => (
+        {SELECTABLE_CATEGORIES_SORTED.map((c) => (
           <SelectItem key={c} value={c} className="text-xs">
             {c}
           </SelectItem>

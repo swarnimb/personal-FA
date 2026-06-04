@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ALL_CATEGORIES } from '@/lib/categories'
+import { SELECTABLE_CATEGORIES_SORTED } from '@/lib/categories'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { AddTransactionModal } from '@/components/transactions/AddTransactionModal'
 import { UpdateRulePrompt } from '@/components/spending/UpdateRulePrompt'
@@ -28,8 +28,6 @@ type PendingRuleEdit = {
   ruleCategory: string
   newCategory: string
 }
-
-const SELECTABLE_CATEGORIES = ALL_CATEGORIES.filter((c) => c !== 'Uncategorized')
 
 class CategoryPatchError extends Error {
   constructor(message: string) {
@@ -204,7 +202,7 @@ export function SpendingTransactionList({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {SELECTABLE_CATEGORIES.map((c) => (
+                            {SELECTABLE_CATEGORIES_SORTED.map((c) => (
                               <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
                             ))}
                           </SelectContent>

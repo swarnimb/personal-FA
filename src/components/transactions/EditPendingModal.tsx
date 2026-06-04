@@ -5,14 +5,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ALL_CATEGORIES } from '@/lib/categories'
+import { SELECTABLE_CATEGORIES_SORTED } from '@/lib/categories'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
 
 type PendingTx = { id: string; merchant: string; amountCents: number; scheduledDate: string; category: string }
 type EditForm = { date: string; amountStr: string; isPositive: boolean; merchant: string; category: string; notes: string }
-
-const SELECTABLE_CATS = ALL_CATEGORIES.filter((c) => c !== 'Uncategorized')
 
 class EditPendingError extends Error {
   constructor(msg: string) {
@@ -103,7 +101,7 @@ export function EditPendingModal({
           <Input placeholder="Merchant" value={form.merchant} onChange={(e) => set('merchant', e.target.value)} aria-label="Merchant" />
           <Select value={form.category} onValueChange={(v) => set('category', v)}>
             <SelectTrigger aria-label="Category"><SelectValue placeholder="Category" /></SelectTrigger>
-            <SelectContent>{SELECTABLE_CATS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            <SelectContent>{SELECTABLE_CATEGORIES_SORTED.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
           </Select>
           <Input placeholder="Notes (optional)" value={form.notes} onChange={(e) => set('notes', e.target.value)} aria-label="Notes" />
           <Button type="submit" disabled={submitting} className="mt-1">{submitting ? 'Saving…' : 'Save & Confirm'}</Button>
