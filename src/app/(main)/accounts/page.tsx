@@ -26,6 +26,7 @@ export default async function AccountsPage() {
     typeConfirmed: a.typeConfirmed,
     currentBalanceCents: a.currentBalanceCents,
     lastSyncedAt: a.lastSyncedAt?.toISOString() ?? null,
+    asOf: (a.balanceAsOf ?? a.lastSyncedAt ?? a.updatedAt)?.toISOString() ?? null,
     syncStatus: (a.lastSyncedAt ? 'synced' : 'never') as 'synced' | 'never',
   })
 

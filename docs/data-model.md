@@ -53,6 +53,7 @@ Represents any financial account — bank (via SimpleFin), crypto exchange, or m
 | isActive | Boolean | default true | Soft delete — never hard delete accounts |
 | exchangeConnectionId | String? | FK → ExchangeConnection, nullable | Set for Coinbase/Kraken accounts |
 | lastSyncedAt | DateTime? | nullable | |
+| balanceAsOf | DateTime? | nullable | Balance's effective time. From SimpleFin `balance-date` (epoch s → ms). Powers the per-account "As of" freshness line; falls back to lastSyncedAt/updatedAt for display (T95). |
 | createdAt | DateTime | auto | |
 | updatedAt | DateTime | auto | |
 

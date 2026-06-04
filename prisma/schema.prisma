@@ -78,6 +78,7 @@ model Account {
   isActive             Boolean            @default(true)
   exchangeConnectionId String?
   lastSyncedAt         DateTime?
+  balanceAsOf          DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 

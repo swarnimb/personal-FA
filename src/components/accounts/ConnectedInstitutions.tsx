@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
+import { formatAsOf } from '@/lib/format'
 
 type AccountCard = {
   id: string
@@ -17,6 +18,7 @@ type AccountCard = {
   typeConfirmed: boolean
   currentBalanceCents: number
   lastSyncedAt: string | null
+  asOf: string | null
   syncStatus: 'synced' | 'never'
 }
 
@@ -214,9 +216,16 @@ function AccountRow({ acc }: { acc: AccountCard }) {
           Confirm
         </button>
       )}
-      <p className="font-manrope font-semibold text-sm text-on-surface">
-        <PrivacyAmount cents={acc.currentBalanceCents} />
-      </p>
+      <div className="flex flex-col items-end">
+        <p className="font-manrope font-semibold text-sm text-on-surface">
+          <PrivacyAmount cents={acc.currentBalanceCents} />
+        </p>
+        {acc.asOf && (
+          <p className="text-xs text-on-surface-variant" suppressHydrationWarning>
+            As of {formatAsOf(new Date(acc.asOf))}
+          </p>
+        )}
+      </div>
       <SyncBadge status={acc.syncStatus} />
     </div>
   )

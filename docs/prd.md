@@ -111,7 +111,7 @@ Account classification: Checking, Savings, Investment, Crypto, Other → **Asset
 ## 7. Accounts Tab
 
 **Bank Accounts section:**
-- List: account name, balance, sync status badge (✓ Synced / ⚠ Error), last synced timestamp.
+- List: account name, balance, sync status badge (✓ Synced / ⚠ Error), balance freshness timestamp (see §7.1).
 - "+ Connect Bank" button.
 
 **SimpleFin connection flow:**
@@ -121,7 +121,7 @@ Account classification: Checking, Savings, Investment, Crypto, Other → **Asset
 4. Triggers immediate first sync: 90-day transaction history fetch + detect `hasHoldings` per account.
 
 **Crypto section:**
-- List: exchange name, coin balances, last synced.
+- List: exchange name, coin balances, balance freshness timestamp (see §7.1).
 - "+ Add Exchange" button.
 
 **Exchange setup modal:**
@@ -131,7 +131,7 @@ Account classification: Checking, Savings, Investment, Crypto, Other → **Asset
 - On save: immediate sync to verify keys and pull initial balances.
 
 **Manual / CSV section:**
-- List: account name, type, balance, last updated date.
+- List: account name, type, balance, balance freshness timestamp (see §7.1).
 - "+ Add Manual" button. Fields: Account Name, Account Type, Current Balance (dollars), Notes.
 - "Import CSV" button per manual account.
 
@@ -141,6 +141,23 @@ Account classification: Checking, Savings, Investment, Crypto, Other → **Asset
 3. User maps columns: Date → [col], Amount → [col], Description → [col].
 4. Preview table shows 10 parsed transactions with auto-categorized categories.
 5. User confirms → all valid rows inserted. Parse errors shown by row number; invalid rows skipped, valid rows inserted.
+
+### 7.1 Balance Freshness ("As of" timestamp) — V1.1
+
+> Refinement of the per-account timestamp already in §7. Each account card shows an accurate "As of \<time\>" line beneath the balance so the user can tell how fresh the number is — SimpleFin balances reflect the bank's *reported* date, which can lag our sync time.
+
+**Logic**
+- **Timestamp source** (precedence per card): `balanceAsOf ?? lastSyncedAt ?? updatedAt` — SimpleFin → `balanceAsOf` (new column, from SimpleFin's per-account `balance-date`); crypto → `lastSyncedAt`; manual → `updatedAt`.
+- **Display (hybrid):** under 24h → relative ("As of 3h ago"); 24h or older → absolute ("As of Jun 2, 2:14 PM"). Host-machine local time.
+
+**Acceptance Criteria**
+- [ ] New `balanceAsOf DateTime?` column on `Account` (DB migration).
+- [ ] SimpleFin sync writes each account's `balance-date` → `balanceAsOf` on every upsert (epoch seconds → Date, ×1000).
+- [ ] Each Accounts card shows an "As of \<time\>" line: SimpleFin → `balanceAsOf`, crypto → `lastSyncedAt`, manual → `updatedAt`.
+- [ ] < 24h → relative format; ≥ 24h → absolute. All timestamps null (defensive) → render nothing, never "Invalid date".
+- [ ] Velvet Ledger: muted text (`on-surface-variant`), no border (CONSTRAINT-05).
+
+**Out of scope:** stale-balance warnings/color-coding (V1.2 follow-up), per-account refresh button, freshness sorting, as-of anywhere but Accounts cards, historical as-of tracking.
 
 ---
 

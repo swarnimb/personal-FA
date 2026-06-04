@@ -10,3 +10,27 @@ export function formatCents(cents: number): string {
 export function formatCentsPrecise(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100)
 }
+
+/**
+ * Hybrid balance-freshness label for a per-account "As of" line.
+ *
+ * Recent times read as relative ("Just now", "5m ago", "3h ago"); anything a
+ * day or older switches to an absolute date/time ("Jun 2, 2:14 PM"). Returns
+ * the time string only — the "As of " prefix lives in the JSX.
+ *
+ * `now` is injectable so unit tests are deterministic. Native Date/Intl only.
+ */
+export function formatAsOf(date: Date, now: Date = new Date()): string {
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMs / 3600000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHr < 24) return `${diffHr}h ago`
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
