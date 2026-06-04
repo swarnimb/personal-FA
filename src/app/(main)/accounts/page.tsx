@@ -24,6 +24,7 @@ export default async function AccountsPage() {
     institution: a.institution,
     type: a.type as string,
     typeConfirmed: a.typeConfirmed,
+    source: a.source as string,
     currentBalanceCents: a.currentBalanceCents,
     lastSyncedAt: a.lastSyncedAt?.toISOString() ?? null,
     asOf: (a.balanceAsOf ?? a.lastSyncedAt ?? a.updatedAt)?.toISOString() ?? null,

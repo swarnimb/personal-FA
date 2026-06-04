@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
-import { formatAsOf } from '@/lib/format'
+import { formatAsOf, isBalanceStale } from '@/lib/format'
 
 type AccountCard = {
   id: string
@@ -16,6 +16,7 @@ type AccountCard = {
   institution: string | null
   type: string
   typeConfirmed: boolean
+  source: string
   currentBalanceCents: number
   lastSyncedAt: string | null
   asOf: string | null
@@ -86,6 +87,8 @@ function AccountRow({ acc }: { acc: AccountCard }) {
   const [nameDraft, setNameDraft] = useState(acc.name)
   const Icon = TYPE_ICONS[acc.type] ?? Landmark
   const needsReview = !acc.typeConfirmed
+  // Manual accounts never go "stale" — only auto-synced balances are flagged.
+  const isStale = acc.source !== 'Manual' && acc.asOf != null && isBalanceStale(new Date(acc.asOf))
 
   /** PATCH the account, mirroring AddManualAccountModal's mutation pattern. */
   const patchAccount = async (body: Record<string, unknown>) => {
@@ -221,8 +224,11 @@ function AccountRow({ acc }: { acc: AccountCard }) {
           <PrivacyAmount cents={acc.currentBalanceCents} />
         </p>
         {acc.asOf && (
-          <p className="text-xs text-on-surface-variant" suppressHydrationWarning>
-            As of {formatAsOf(new Date(acc.asOf))}
+          <p
+            className={`text-xs ${isStale ? 'text-tertiary/70' : 'text-on-surface-variant'}`}
+            suppressHydrationWarning
+          >
+            {isStale && '⚠ '}As of {formatAsOf(new Date(acc.asOf))}
           </p>
         )}
       </div>

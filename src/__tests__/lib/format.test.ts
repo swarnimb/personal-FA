@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { formatAsOf } from '../../lib/format'
+import { formatAsOf, isBalanceStale } from '../../lib/format'
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 describe('formatAsOf', () => {
   it('returns "Just now" for under a minute', () => {
@@ -26,5 +28,25 @@ describe('formatAsOf', () => {
     const result = formatAsOf(date, now)
     expect(result).not.toContain('ago')
     expect(result).toMatch(/\w{3} \d+,/)
+  })
+})
+
+describe('isBalanceStale', () => {
+  const now = new Date('2026-06-04T12:00:00Z')
+
+  it('is stale when the balance is 8 days old', () => {
+    expect(isBalanceStale(new Date(now.getTime() - 8 * DAY_MS), now)).toBe(true)
+  })
+
+  it('is not stale when the balance is 2 days old', () => {
+    expect(isBalanceStale(new Date(now.getTime() - 2 * DAY_MS), now)).toBe(false)
+  })
+
+  it('is not stale at exactly 7 days (strict boundary)', () => {
+    expect(isBalanceStale(new Date(now.getTime() - 7 * DAY_MS), now)).toBe(false)
+  })
+
+  it('is stale just past 7 days (7 days + 60s)', () => {
+    expect(isBalanceStale(new Date(now.getTime() - (7 * DAY_MS + 60_000)), now)).toBe(true)
   })
 })

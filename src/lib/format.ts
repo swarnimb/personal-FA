@@ -34,3 +34,16 @@ export function formatAsOf(date: Date, now: Date = new Date()): string {
     minute: '2-digit',
   }).format(date)
 }
+
+// Staleness threshold for an auto-synced account's balance freshness.
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * True when a balance-freshness timestamp is STRICTLY older than 7 days from
+ * `now` — the trigger for the Accounts-tab stale-balance warning. Exactly 7
+ * days is NOT stale (strict `>`). Callers must gate on a non-null timestamp;
+ * this does not handle null. `now` is injectable for deterministic tests.
+ */
+export function isBalanceStale(date: Date, now: Date = new Date()): boolean {
+  return now.getTime() - date.getTime() > SEVEN_DAYS_MS
+}

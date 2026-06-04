@@ -157,7 +157,33 @@ Account classification: Checking, Savings, Investment, Crypto, Other → **Asset
 - [ ] < 24h → relative format; ≥ 24h → absolute. All timestamps null (defensive) → render nothing, never "Invalid date".
 - [ ] Velvet Ledger: muted text (`on-surface-variant`), no border (CONSTRAINT-05).
 
-**Out of scope:** stale-balance warnings/color-coding (V1.2 follow-up), per-account refresh button, freshness sorting, as-of anywhere but Accounts cards, historical as-of tracking.
+**Out of scope:** stale-balance warnings/color-coding (now §7.2), per-account refresh button, freshness sorting, as-of anywhere but Accounts cards, historical as-of tracking.
+
+---
+
+### 7.2 Stale-Balance Warning — V1.2
+
+> Builds on §7.1. When an auto-synced account's balance is more than 7 days old, its "As of" line is visually flagged so the user notices data they shouldn't trust — usually a silently-failed sync or a disconnected account. Passive visual only; no alerts/notifications (§13).
+
+**Logic**
+- **Staleness rule:** an account is *stale* when its effective as-of timestamp (`balanceAsOf ?? lastSyncedAt ?? updatedAt`, per §7.1) is strictly older than 7 days from host-machine "now."
+- **Exemptions:** manual accounts are never flagged (no sync source → "stale" is meaningless). Auto-synced accounts (SimpleFin bank + crypto/investment) are subject to the rule.
+- **Treatment (subtle):** the existing "As of" line gets a muted warning tint + a small warning glyph (⚠). No border, no background fill, no red box — Velvet Ledger restraint (CONSTRAINT-05). Nothing else on the card changes.
+- **Defensive:** null/unresolved timestamp → render today's §7.1 behavior (no warning); never flag on missing data.
+
+**Acceptance Criteria**
+- [ ] Auto-synced account with effective as-of > 7 days → "As of" line renders in warning tint + glyph.
+- [ ] Auto-synced account with effective as-of ≤ 7 days → normal §7.1 style, no warning. Boundary: exactly 7 days = not stale.
+- [ ] Manual account → never flagged, regardless of age.
+- [ ] Null/unresolved timestamp → no warning, no "Invalid date" (defensive).
+- [ ] Velvet Ledger: warning tint is a muted palette token, no border/background fill (CONSTRAINT-05); subtle, not alarming.
+- [ ] Privacy mode unaffected — warning shows regardless of amount masking.
+
+**Complementary to the sync badge:** §7's ✓ Synced / ⚠ Error badge answers "did the last sync attempt fail?"; this warning answers "is the data old, regardless of why?". Do not double-up the two cues on the card.
+
+**Out of scope (V1.2):** Dashboard/Net Worth aggregate stale cue, configurable/per-type thresholds, freshness sorting/filtering, per-account refresh button, notifications/toasts/email (§13), auto-retry of failed syncs.
+
+**Success metric:** A silently-stale account is obvious at a glance on the Accounts tab — the user catches a broken sync without reading every timestamp.
 
 ---
 
