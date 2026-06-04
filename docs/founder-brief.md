@@ -418,3 +418,18 @@
 **Check before approving:** The backfill and the snapshot seed (FB-25) are one-time scripts — run them once on your machine; they don't run automatically each sync. The keyword-exclusion mechanism is general: if another rule's keyword ever over-matches in the future, the fix is to add an `excludeKeywords` phrase to that rule rather than weakening the keyword. No action needed beyond running the one-time scripts once.
 
 **What this closes off:** Nothing. The exclusion list is additive (add phrases as needed). The corrective backfill is a one-off cleanup, not a permanent pipeline change — routine sync still categorizes new rows correctly via the existing precedence (FB-20). Forcing live rendering on these two pages is the page-level expression of the existing V1.0-live vs. demo-static split (FB-14); it doesn't change the demo.
+
+---
+
+## FB-27: Account Balance "As of" Timestamp
+
+**Date:** 2026-06-04
+**Architecture section:** `docs/architecture.md` § Accounts / SimpleFin sync → `balanceAsOf` note; PRD §7.1
+
+**Decided:** Each account card shows an "As of \<time\>" freshness line. SimpleFin's per-account `balance-date` is stored in a new nullable `balanceAsOf` column and displayed with precedence `balanceAsOf ?? lastSyncedAt ?? updatedAt`; hybrid format (relative under 24h, absolute beyond).
+
+**Means for your product:** Users can tell how current each balance is. SimpleFin's balance-date is the bank's own "accurate as of" date, which can lag our sync time — so freshness is now honest rather than implied.
+
+**Check before approving:** `balanceAsOf` is null until the next SimpleFin sync; existing accounts fall back to `lastSyncedAt` (synced) or `updatedAt` (manual) until then — expected.
+
+**What this closes off:** Nothing — additive nullable column, fully reversible. Stale-balance *warnings* (color/alerts) deliberately deferred to V1.2.
