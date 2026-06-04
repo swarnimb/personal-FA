@@ -3,6 +3,12 @@ export type CategoryRule = {
   category: string
   requirePositive?: boolean
   requireNegative?: boolean
+  /**
+   * Phrases that VETO this rule even when a keyword matches. Guards against
+   * generic keywords substring-matching unrelated merchants — e.g. 'MARKET'
+   * (Groceries) wrongly catching 'MONEY MARKET' / 'STOCK MARKET' brokerage rows.
+   */
+  excludeKeywords?: string[]
 }
 
 // Rules checked in order — first match wins.
@@ -32,7 +38,14 @@ export const KEYWORD_RULES: CategoryRule[] = [
     category: 'Subscriptions',
   },
 
-  { keywords: ['TRADER JOE', 'WHOLE FOODS', 'SAFEWAY', 'KROGER', 'GROCERY', 'MARKET'], category: 'Groceries' },
+  {
+    keywords: ['TRADER JOE', 'WHOLE FOODS', 'SAFEWAY', 'KROGER', 'GROCERY', 'MARKET'],
+    category: 'Groceries',
+    // 'MARKET' is a useful grocery keyword (e.g. 'Sprouts Farmers Market') but
+    // substring-matches 'MONEY MARKET'/'STOCK MARKET' brokerage transactions —
+    // veto those so they fall through to the investment-account → Transfer Out step.
+    excludeKeywords: ['MONEY MARKET', 'STOCK MARKET'],
+  },
 
   // Dining before Transport — 'UBEREATS' contains 'UBER'
   {

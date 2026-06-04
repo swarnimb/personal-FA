@@ -40,6 +40,7 @@ function applyKeywordEngine(merchant: string, amountCents: number): string {
   for (const rule of KEYWORD_RULES) {
     if (rule.requirePositive && amountCents <= 0) continue
     if (rule.requireNegative && amountCents >= 0) continue
+    if (rule.excludeKeywords?.some((kw) => upper.includes(kw))) continue
     if (rule.keywords.some((kw) => upper.includes(kw))) return rule.category
   }
   return UNCATEGORIZED

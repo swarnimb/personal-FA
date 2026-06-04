@@ -51,6 +51,37 @@ describe('categorizeTransaction — keyword engine (V1.0 behaviors preserved)', 
       await categorizeTransaction({ merchant: 'RANDOM MERCHANT XYZ', amountCents: -1000 }, CHECKING),
     ).toBe('Uncategorized')
   })
+
+  it('SPROUTS FARMERS MARKET negative → Groceries (legitimate MARKET keyword still matches)', async () => {
+    // Proves the Groceries excludeKeywords veto does NOT break ordinary
+    // 'MARKET' grocery merchants.
+    expect(
+      await categorizeTransaction({ merchant: 'SPROUTS FARMERS MARKET', amountCents: -6789 }, CHECKING),
+    ).toBe('Groceries')
+  })
+})
+
+describe('categorizeTransaction — Groceries excludeKeywords veto (MONEY MARKET / STOCK MARKET)', () => {
+  it('SPAXX MONEY MARKET reinvestment on an Investment account → Transfer Out, NOT Groceries', async () => {
+    // 'MARKET' would substring-match the Groceries rule, but the
+    // excludeKeywords veto on 'MONEY MARKET' lets it fall through to the
+    // investment-account → Transfer Out step (Step 3).
+    const result = await categorizeTransaction(
+      { merchant: 'REINVESTMENT FIDELITY GOVERNMENT MONEY MARKET (SPAXX)', amountCents: -123456 },
+      INVESTMENT,
+    )
+    expect(result).toBe('Transfer Out')
+    expect(result).not.toBe('Groceries')
+  })
+
+  it('STOCK MARKET brokerage row on an Investment account → Transfer Out, NOT Groceries', async () => {
+    const result = await categorizeTransaction(
+      { merchant: 'STOCK MARKET PURCHASE', amountCents: -50000 },
+      INVESTMENT,
+    )
+    expect(result).toBe('Transfer Out')
+    expect(result).not.toBe('Groceries')
+  })
 })
 
 describe('categorizeTransaction — 4-step precedence (V1.1 Phase 2)', () => {
