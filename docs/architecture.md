@@ -81,6 +81,8 @@ Views are managed via `prisma migrate dev --create-only` + manual SQL in the mig
 **Transaction-based accounts (Checking, Savings, Credit Cards):**
 Historical balance computable at query time: `current_balance_cents − SUM(transaction.amountCents WHERE date > target_date)`. No snapshots needed. History depth = depth of transaction history (~90 days from first sync).
 
+**Balance freshness ("As of"):** each Accounts-page card shows when its balance was last accurate, sourced from `Account.balanceAsOf` (SimpleFin `balance-date`, epoch s → ms in `upsertAccount`) with a `lastSyncedAt` → `updatedAt` fallback for accounts that never carried a feed date (T95).
+
 **Value-based accounts (Investment, Crypto):**
 Value changes from market movements, independent of transactions. Cannot be reconstructed. Daily cron appends one `BalanceSnapshot` row per account. History starts from installation date and grows forward. The `BalanceSnapshot` table has a `UNIQUE(accountId, date)` constraint — cron is idempotent.
 
@@ -182,7 +184,7 @@ src/
 │   ├── simplefin.ts                   # SimpleFin API client
 │   ├── coinbase.ts                    # Coinbase Advanced Trade client
 │   ├── kraken.ts                      # Kraken REST client
-│   ├── sync-simplefin.ts              # SimpleFin sync logic (upsert, hasHoldings detection)
+│   ├── sync-simplefin.ts              # SimpleFin sync logic (upsert, hasHoldings detection, balanceAsOf from balance-date)
 │   ├── sync-crypto.ts                 # Exchange sync logic (balances, snapshots)
 │   ├── sync.ts                        # Orchestrator: runs all syncs + creates SyncLog
 │   ├── snapshot.ts                    # Balance snapshot append (idempotent)

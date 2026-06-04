@@ -47,6 +47,16 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string;
   const balanceCents = normalizeBalanceCents(rawBalanceCents, accountType)
   const now = new Date()
 
+  // SimpleFin reports the balance's effective time as epoch SECONDS in
+  // `balance-date`. Surface it as a per-account "As of" freshness marker.
+  // A malformed/missing feed value must never crash the sync — fall back to
+  // null so `lastSyncedAt`/`updatedAt` can carry the freshness display.
+  const balanceDateSeconds = sfAccount['balance-date']
+  const balanceAsOf =
+    typeof balanceDateSeconds === 'number' && Number.isFinite(balanceDateSeconds)
+      ? new Date(balanceDateSeconds * 1000)
+      : null
+
   const account = await db.account.upsert({
     where: { externalId: sfAccount.id },
     create: {
@@ -60,6 +70,7 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string;
       hasHoldings,
       isActive: true,
       lastSyncedAt: now,
+      balanceAsOf,
     },
     update: {
       // `name` is intentionally NOT updated — the user may have renamed the
@@ -69,6 +80,7 @@ async function upsertAccount(sfAccount: SimplefinAccount): Promise<{ id: string;
       currentBalanceCents: balanceCents,
       hasHoldings,
       lastSyncedAt: now,
+      balanceAsOf,
     },
   })
   if (hasHoldings) {

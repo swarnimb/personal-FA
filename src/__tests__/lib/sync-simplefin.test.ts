@@ -255,4 +255,49 @@ describe('syncSimplefin', () => {
 
     expect(mockAppendBalanceSnapshot).not.toHaveBeenCalled()
   })
+
+  it('persists balanceAsOf derived from balance-date (seconds → ms)', async () => {
+    const balanceDateSeconds = 1717502040 // 2024-06-04T12:34:00Z
+    mockDb.simplefinConnection.findMany.mockResolvedValue([makeConnection()])
+    mockDb.simplefinConnection.update.mockResolvedValue(makeConnection())
+    mockDb.account.findUnique.mockResolvedValue({ type: 'Checking' })
+    mockFetchAccounts.mockResolvedValue([
+      { id: 'sf-chk', name: 'Everyday Checking', balance: '100.00', 'balance-date': balanceDateSeconds },
+    ])
+    mockFetchTransactions.mockResolvedValue([])
+    mockDb.account.upsert.mockResolvedValue({ id: 'db-chk' })
+
+    await syncSimplefin()
+
+    const call = mockDb.account.upsert.mock.calls[0][0] as {
+      create: Record<string, unknown>
+      update: Record<string, unknown>
+    }
+    const expected = new Date(balanceDateSeconds * 1000)
+    expect(call.create.balanceAsOf).toEqual(expected)
+    expect(call.update.balanceAsOf).toEqual(expected)
+  })
+
+  it('writes balanceAsOf: null when balance-date is missing/NaN, without throwing', async () => {
+    mockDb.simplefinConnection.findMany.mockResolvedValue([makeConnection()])
+    mockDb.simplefinConnection.update.mockResolvedValue(makeConnection())
+    mockDb.account.findUnique.mockResolvedValue({ type: 'Checking' })
+    mockFetchAccounts.mockResolvedValue([
+      // 'balance-date' deliberately omitted → undefined
+      { id: 'sf-chk', name: 'Everyday Checking', balance: '100.00' },
+    ])
+    mockFetchTransactions.mockResolvedValue([])
+    mockDb.account.upsert.mockResolvedValue({ id: 'db-chk' })
+
+    const result = await syncSimplefin()
+
+    expect(result.errors).toHaveLength(0)
+    expect(result.accountsSynced).toBe(1)
+    const call = mockDb.account.upsert.mock.calls[0][0] as {
+      create: Record<string, unknown>
+      update: Record<string, unknown>
+    }
+    expect(call.create.balanceAsOf).toBeNull()
+    expect(call.update.balanceAsOf).toBeNull()
+  })
 })

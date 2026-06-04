@@ -3405,4 +3405,43 @@ model AppSettings {
 
 **Session 40 (2026-06-04) — T94 CLOSED:** `@security` CLEAR (0 findings); `@qa` APPROVED — both privacy ACs builder-confirmed live (banner on /review; consent modal after a flag reset + fresh build). All ACs satisfied; 3 blank-merchant Loan txns accepted non-blocking. Stale-prod-build handoff item resolved (builder rebuilt + restarted). V1.1 Phase 2 (T79–T94) formally COMPLETE. Reports: docs/qa-report.md, docs/security-report.md.
 
-> **Next session (not yet a numbered task):** "Account as-of timestamp" feature — surface SimpleFin's per-account `balance-date` per account card on the Accounts page. To be scoped into a numbered task next session.
+---
+
+## Task 95: Account balance "As of" timestamp
+
+**Source:** `docs/prd.md` §7.1 — Balance Freshness ("As of" timestamp)
+
+**Files:**
+- `prisma/schema.prisma` — modify (add `balanceAsOf DateTime?` to `Account`)
+- `prisma/migrations/<YYYYMMDDHHMMSS>_add_account_balance_as_of/migration.sql` — create (via `npx prisma migrate dev --name add_account_balance_as_of`, matching the existing `YYYYMMDDHHMMSS_slug` folder convention)
+- `src/lib/sync-simplefin.ts` — modify (`upsertAccount` persists `balance-date`)
+- `src/lib/format.ts` — modify (add `formatAsOf`)
+- `src/app/(main)/accounts/page.tsx` — modify (`toCard()` resolves precedence → `asOf`)
+- `src/components/accounts/ConnectedInstitutions.tsx` — modify (`AccountCard` type + render the line)
+- `src/__tests__/lib/format.test.ts` — create
+- `src/__tests__/lib/sync-simplefin.test.ts` — modify
+
+**Functions to implement:**
+- `formatAsOf(date: Date, now?: Date): string` — hybrid: `< 24h` → relative (`"Just now"` <1m, `"Nm ago"` <60m, `"Nh ago"` <24h); `≥ 24h` → absolute via `Intl.DateTimeFormat` (`{ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }` → e.g. `"Jun 2, 2:14 PM"`). `now` injectable for deterministic tests. Returns the time string only — the `"As of "` prefix lives in the JSX.
+- `toCard()` (existing, page.tsx) — add `asOf: (a.balanceAsOf ?? a.lastSyncedAt ?? a.updatedAt)?.toISOString() ?? null` to the returned card shape.
+- `upsertAccount` (existing, sync-simplefin.ts) — add `balanceAsOf: new Date(sfAccount['balance-date'] * 1000)` to both the `create` and `update` blocks. Leave `lastSyncedAt` untouched.
+
+**Acceptance criteria:**
+- [x] `balanceAsOf DateTime?` column added to `Account`; migration created + applied; `tsc` clean.
+- [x] `upsertAccount` writes `balance-date` (×1000 → Date) to `balanceAsOf` on both create and update; `lastSyncedAt` behavior unchanged.
+- [x] `toCard()` resolves precedence `balanceAsOf ?? lastSyncedAt ?? updatedAt` server-side and passes a single `asOf` string (or null) to the card.
+- [x] `AccountRow` renders an "As of \<time\>" line beneath the balance for SimpleFin (balanceAsOf), crypto (lastSyncedAt), and manual (updatedAt) accounts.
+- [x] `< 24h` → relative format; `≥ 24h` → absolute format. `asOf === null` → render nothing (never "Invalid date").
+- [x] CONSTRAINT-05: muted text (`text-on-surface-variant`), no border. `suppressHydrationWarning` on the timestamp element (relative time legitimately differs server vs client).
+- [x] Doc updates: `docs/data-model.md` Account table gains `balanceAsOf` (required); `docs/architecture.md` one-line note (light).
+
+**Tests required:**
+- [x] `formatAsOf` → `now − 3h` returns `"3h ago"` (relative branch) [happy path]
+- [x] `formatAsOf` → `now − 2 days` returns an absolute `"Jun 2, …"`-shaped string (absolute branch) [happy path]
+- [x] `upsertAccount` → persists `balanceAsOf` from `balance-date` on create [happy path]
+- [x] `upsertAccount` → missing/odd `balance-date` does not throw [error case]
+
+**Depends on:** Task 6 (SimpleFin sync engine) — complete.
+**Specialist:** `@data-sync` (migration + `upsertAccount`) · `@ui-amibroke` (card line + Velvet Ledger styling)
+
+**Session 41 (2026-06-04) — IMPLEMENTED:** `balanceAsOf` column added + migration `20260604120000_add_account_balance_as_of` applied to dev + test DBs. `upsertAccount` persists SimpleFin `balance-date` (finite-number guard → null on malformed feed). `formatAsOf` (hybrid relative/absolute, native Intl) in `format.ts`; precedence resolved in `toCard()`; card line rendered with `suppressHydrationWarning` + `text-on-surface-variant`. `tsc` clean; **372 unit + 92 integration green** (re-run by orchestrator). Docs updated. **Pending:** live visual check on `/accounts` (relative/absolute display across SimpleFin/crypto/manual cards) + optional `@qa`/`@security`. Built on branch `feat/t95-account-as-of-timestamp`.
