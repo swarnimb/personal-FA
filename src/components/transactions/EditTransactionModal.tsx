@@ -18,7 +18,6 @@ export type EditableTransaction = {
   notes?: string | null
 }
 
-type Account = { id: string; name: string }
 type EditForm = { date: string; amountStr: string; isPositive: boolean; merchant: string; category: string; notes: string }
 
 /**
@@ -42,8 +41,6 @@ function txToForm(tx: EditableTransaction): EditForm {
  * `useTransactionMutation` — single-transaction edit only, NEVER `updateRule`.
  * Closes on success; stays open and toasts on error (CONSTRAINT-17 invalid
  * category → 400 → toast, not a crash).
- *
- * @param accounts - optional, accepted for call-site symmetry; not yet edited here.
  */
 export function EditTransactionModal({
   transaction,
@@ -53,7 +50,6 @@ export function EditTransactionModal({
   transaction: EditableTransaction
   open: boolean
   onOpenChange: (v: boolean) => void
-  accounts?: Account[]
 }) {
   const [form, setForm] = useState<EditForm>(() => txToForm(transaction))
   const { patch, isSaving } = useTransactionMutation(transaction.id)
