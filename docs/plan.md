@@ -110,7 +110,7 @@
 | 97 | Split `ConnectedInstitutions.tsx` (CQ-01 + CQ-02 refactor) | [x] |
 | 98 | Case-insensitive merchant search on GET /api/transactions (§16) | [x] |
 | 99 | `/transactions` page, filter bar, paginated table (§16) | [x] |
-| 100 | Inline edit + delete on transaction rows (§16) | [ ] |
+| 100 | Inline edit + delete on transaction rows (§16) | [x] |
 | 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
@@ -3618,18 +3618,20 @@ model AppSettings {
 - TransactionRow actions (in TransactionTable.tsx) — Edit opens the modal; Delete confirms before calling remove().
 
 **Acceptance criteria:**
-- [ ] Row Edit opens a modal pre-filled with date, merchant, amount (abs + sign toggle), category, notes; Save PATCHes via /api/transactions/[id] and router.refresh().
-- [ ] Delete prompts for confirmation then calls DELETE /api/transactions/[id]; success refreshes.
-- [ ] PRD §16 single-transaction rule: PATCH body NEVER includes `updateRule` (no MerchantRule upsert / retroactive re-categorization).
-- [ ] CONSTRAINT-17: invalid-category 400 from PATCH surfaces as a toast, not a crash; EH-01 — hook throws a named contextful error and toasts its message.
-- [ ] Demo mode: patch + remove short-circuit to a demo toast with no network call.
-- [ ] CALC-05: amount ÷100 on load / ×100 on save confined to the modal form boundary; integer cents stored; sign preserved.
-- [ ] CONSTRAINT-05 glassmorphism dialog per EditPendingModal, no layout borders. CQ-02 modal < 200 lines; CQ-01 handlers < 50 logic lines. No default exports.
+- [x] Row Edit opens a modal pre-filled with date, merchant, amount (abs + sign toggle), category, notes; Save PATCHes via /api/transactions/[id] and router.refresh().
+- [x] Delete prompts for confirmation then calls DELETE /api/transactions/[id]; success refreshes.
+- [x] PRD §16 single-transaction rule: PATCH body NEVER includes `updateRule` (no MerchantRule upsert / retroactive re-categorization).
+- [x] CONSTRAINT-17: invalid-category 400 from PATCH surfaces as a toast, not a crash; EH-01 — hook throws a named contextful error and toasts its message.
+- [x] Demo mode: patch + remove short-circuit to a demo toast with no network call.
+- [x] CALC-05: amount ÷100 on load / ×100 on save confined to the modal form boundary; integer cents stored; sign preserved.
+- [x] CONSTRAINT-05 glassmorphism dialog per EditPendingModal, no layout borders. CQ-02 modal < 200 lines; CQ-01 handlers < 50 logic lines. No default exports.
 
 **Tests required:**
 - `describe('EditTransactionModal')` → `it('pre-fills from amountCents (abs + sign) and PATCHes integer cents with NO updateRule on save')` [happy]
 - `describe('EditTransactionModal')` → `it('surfaces a toast and stays open on a non-OK PATCH (invalid category 400)')` [error]
 - `describe('useTransactionMutation')` → `it('short-circuits to a demo toast and makes no fetch in demo mode (patch + remove)')` [guard]
+
+**Session 45 (2026-06-04) — IMPLEMENTED:** Created `useTransactionMutation.ts` (93 — patch+remove to `/api/transactions/[id]`; demo short-circuit no-network, named `TransactionMutationError`→toast, `router.refresh`, per-row `isSaving`; PATCH body type omits `updateRule`), `EditTransactionModal.tsx` (124 — glassmorphism dialog per EditPendingModal; CALC-05 ÷100 in `txToForm` / ×100 in submit only; empty notes → `undefined`, never wipes existing), `TransactionRow.tsx` (139 — **extracted** from TransactionTable per CQ-02; read columns unchanged, per-row Edit + inline two-step Delete confirm). `TransactionTable.tsx` slimmed to delegate to the row. The pre-existing `[id]/route.ts` already had the PATCH (CONSTRAINT-17 400 on bad category) + DELETE handlers — dependency satisfied, no route work needed. Deviations (all sound): inline Delete confirm instead of `window.confirm` (unstyleable / breaks Velvet Ledger, no codebase usage); `patch`/`remove` return `boolean` so callers close only on success; `accounts?` prop accepted but account not edited (route omits accountId). 3 tests added (happy asserts `'updateRule' in body === false` + integer cents w/ sign). Orchestrator re-ran FULL suite (64 files / 384 tests green) + `tsc --noEmit` clean + reviewed hook/modal/row. **Merged to `main`** (commit `8089960`, merge `0081572`; feat branch deleted). `@security`/`@code-review` deferred to end-of-feature gate after T101.
 
 **Depends on:** Task 99
 **Specialist:** @ui-amibroke · @write-tests
