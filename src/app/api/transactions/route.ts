@@ -35,11 +35,15 @@ export async function GET(req: Request): Promise<Response> {
   const page = Math.max(1, Number(searchParams.get('page') ?? '1'))
   const pageSize = 20
   const merchant = searchParams.get('merchant')?.trim()
+  const status = searchParams.get('status')
+  if (status && !Object.values(TransactionStatus).includes(status as TransactionStatus)) {
+    return Response.json({ error: 'Invalid status: must be confirmed|pending' }, { status: 400 })
+  }
   const where = {
     date: { gte: from, lte: to },
     ...(searchParams.get('accountId') ? { accountId: searchParams.get('accountId')! } : {}),
     ...(searchParams.get('category') ? { category: searchParams.get('category')! } : {}),
-    ...(searchParams.get('status') ? { status: searchParams.get('status') as TransactionStatus } : {}),
+    ...(status ? { status: status as TransactionStatus } : {}),
     ...(merchant ? { merchant: { contains: merchant, mode: 'insensitive' as const } } : {}),
   }
   const [transactions, total] = await Promise.all([

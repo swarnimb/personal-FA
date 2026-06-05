@@ -71,6 +71,16 @@ describe('GET /api/transactions', () => {
     expect(body.error).toContain('Invalid range')
   })
 
+  it('returns 400 for an invalid status (allow-listed against the enum)', async () => {
+    const req = new Request('http://localhost/api/transactions?range=ytd&status=bogus')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.error).toContain('Invalid status')
+    expect(db.transaction.findMany).not.toHaveBeenCalled()
+  })
+
   it('filters by merchant case-insensitively (contains + insensitive mode)', async () => {
     vi.mocked(db.transaction.findMany).mockResolvedValue([makeTx()] as never)
     vi.mocked(db.transaction.count).mockResolvedValue(1)
