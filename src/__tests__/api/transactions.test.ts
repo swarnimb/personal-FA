@@ -70,6 +70,37 @@ describe('GET /api/transactions', () => {
     expect(res.status).toBe(400)
     expect(body.error).toContain('Invalid range')
   })
+
+  it('filters by merchant case-insensitively (contains + insensitive mode)', async () => {
+    vi.mocked(db.transaction.findMany).mockResolvedValue([makeTx()] as never)
+    vi.mocked(db.transaction.count).mockResolvedValue(1)
+
+    const req = new Request('http://localhost/api/transactions?range=ytd&merchant=trader')
+    await GET(req)
+
+    const expectedWhere = expect.objectContaining({
+      merchant: { contains: 'trader', mode: 'insensitive' },
+    })
+    expect(db.transaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    )
+    expect(db.transaction.count).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere }),
+    )
+  })
+
+  it('ignores an empty merchant param (no merchant clause)', async () => {
+    vi.mocked(db.transaction.findMany).mockResolvedValue([makeTx()] as never)
+    vi.mocked(db.transaction.count).mockResolvedValue(1)
+
+    const req = new Request('http://localhost/api/transactions?range=ytd&merchant=%20%20')
+    await GET(req)
+
+    const findManyWhere = vi.mocked(db.transaction.findMany).mock.calls[0][0]!.where
+    expect(findManyWhere).not.toHaveProperty('merchant')
+    const countWhere = vi.mocked(db.transaction.count).mock.calls[0][0]!.where
+    expect(countWhere).not.toHaveProperty('merchant')
+  })
 })
 
 describe('POST /api/transactions', () => {
