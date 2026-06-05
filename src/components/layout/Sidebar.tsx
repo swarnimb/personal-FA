@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Wallet,
   Building2,
+  Receipt,
   Settings,
   ListChecks,
 } from "lucide-react"
@@ -20,6 +21,7 @@ const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Net Worth", href: "/net-worth", icon: Wallet },
   { label: "Income", href: "/income", icon: DollarSign },
   { label: "Spending", href: "/spending", icon: ShoppingCart },
+  { label: "Transactions", href: "/transactions", icon: Receipt },
   { label: "Investments", href: "/investments", icon: TrendingUp },
   { label: "Accounts", href: "/accounts", icon: Building2 },
   { label: "Settings", href: "/settings", icon: Settings },

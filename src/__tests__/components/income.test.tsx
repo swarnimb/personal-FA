@@ -80,53 +80,16 @@ describe('IncomeTransactionList', () => {
     expect(checkIcons.length).toBe(2)
   })
 
-  it('renders "View All Entries" link', () => {
+  // T101 — the per-card "View All Entries" affordance was removed entirely.
+  // The dedicated Transaction Browser (/transactions, in the sidebar) now owns
+  // full-list browsing, so the old link/inert-span is gone from this card.
+  it('no longer renders a View All Entries affordance', () => {
     render(
       <PrivacyProvider>
         <IncomeTransactionList transactions={[makeTx()]} />
       </PrivacyProvider>
     )
-    expect(screen.getByText('View All Entries')).toBeInTheDocument()
-  })
-})
-
-describe('IncomeTransactionList link', () => {
-  // Task 64 — Next.js <Link> is required so basePath is auto-prepended in the
-  // GitHub Pages demo build. A raw <a href="/..."> would 404 under
-  // /personal-FA/. We assert the rendered anchor href to confirm migration.
-  //
-  // Task 73 — In demo mode the link is replaced with an inert <span>
-  // because the static export has no `/transactions/` route. Two tests
-  // below assert: (a) local mode still renders the navigating Link;
-  // (b) demo mode renders the disabled span with the locked tooltip copy.
-  it('renders Next Link to /transactions?type=income in local mode', () => {
-    vi.stubEnv('NEXT_PUBLIC_DEMO_MODE', undefined as unknown as string)
-    render(
-      <PrivacyProvider>
-        <IncomeTransactionList transactions={[makeTx()]} />
-      </PrivacyProvider>
-    )
-    const link = screen.getByText('View All Entries').closest('a')
-    expect(link).not.toBeNull()
-    expect(link?.getAttribute('href')).toBe('/transactions?type=income')
-  })
-
-  it('renders inert <span> with disabled-link tooltip in demo mode', () => {
-    vi.stubEnv('NEXT_PUBLIC_DEMO_MODE', 'true')
-    render(
-      <PrivacyProvider>
-        <IncomeTransactionList transactions={[makeTx()]} />
-      </PrivacyProvider>
-    )
-    const element = screen.getByText('View All Entries')
-    // The element is still present in the DOM (AC: do not hide it)…
-    expect(element).toBeInTheDocument()
-    // …but it is NOT an anchor — no navigation, no prefetch.
-    expect(element.closest('a')).toBeNull()
-    expect(element.tagName).toBe('SPAN')
-    // Tooltip copy is locked — matches the constant in IncomeTransactionList.
-    expect(element.getAttribute('title')).toBe('Available when running locally.')
-    expect(element.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.queryByText('View All Entries')).not.toBeInTheDocument()
   })
 })
 
