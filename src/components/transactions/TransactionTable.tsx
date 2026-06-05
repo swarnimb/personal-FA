@@ -1,7 +1,7 @@
 'use client'
 
-import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { cn } from '@/lib/utils'
+import { TransactionRow } from '@/components/transactions/TransactionRow'
 
 export type BrowserTransaction = {
   id: string
@@ -15,11 +15,12 @@ export type BrowserTransaction = {
 type Account = { id: string; name: string }
 
 /**
- * Presentational transaction table for the Transaction Browser (T99).
- * Columns: date · merchant · category · account · amount. No row actions yet
- * (edit/delete arrives in T100). Amounts render via `<PrivacyAmount>` only
- * (CALC-05 — cents are never divided in TS); positive amounts are `text-primary`
- * with a leading `+`, negative are `text-tertiary` with a leading `−`.
+ * Presentational transaction table for the Transaction Browser. Columns:
+ * date · merchant · category · account · amount · actions. Each row is a
+ * `<TransactionRow>` which adds per-row Edit + Delete (T100) while preserving
+ * the T99 read path: amounts via `<PrivacyAmount>` only (CALC-05 — cents never
+ * divided in TS), positive `text-primary` with a leading `+`, negative
+ * `text-tertiary` with a leading `−`. No layout borders.
  */
 export function TransactionTable({
   transactions,
@@ -40,46 +41,17 @@ export function TransactionTable({
             <Th>Category</Th>
             <Th>Account</Th>
             <Th className="text-right">Amount</Th>
+            <Th className="text-right sr-only">Actions</Th>
           </tr>
         </thead>
         <tbody>
-          {transactions.map((tx) => {
-            const isPositive = tx.amountCents >= 0
-            return (
-              <tr
-                key={tx.id}
-                className="hover:bg-surface-highest transition-colors duration-150"
-              >
-                <td className="px-6 py-3 font-inter text-sm text-on-surface-variant whitespace-nowrap">
-                  {new Date(tx.date).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </td>
-                <td className="px-3 py-3 font-inter text-sm text-on-surface truncate max-w-[220px]">
-                  {tx.merchant}
-                </td>
-                <td className="px-3 py-3">
-                  <span className="font-inter font-medium text-xs tracking-wider uppercase text-on-surface-variant bg-surface-high px-2 py-0.5 rounded">
-                    {tx.category}
-                  </span>
-                </td>
-                <td className="px-3 py-3 font-inter text-sm text-on-surface-variant truncate max-w-[180px]">
-                  {accountNameById.get(tx.accountId) ?? '—'}
-                </td>
-                <td
-                  className={cn(
-                    'px-6 py-3 text-right font-manrope font-semibold text-sm whitespace-nowrap',
-                    isPositive ? 'text-primary' : 'text-tertiary',
-                  )}
-                >
-                  {isPositive ? '+' : '−'}
-                  <PrivacyAmount cents={Math.abs(tx.amountCents)} />
-                </td>
-              </tr>
-            )
-          })}
+          {transactions.map((tx) => (
+            <TransactionRow
+              key={tx.id}
+              tx={tx}
+              accountName={accountNameById.get(tx.accountId) ?? '—'}
+            />
+          ))}
         </tbody>
       </table>
     </div>
