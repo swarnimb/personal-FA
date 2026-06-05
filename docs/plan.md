@@ -111,7 +111,7 @@
 | 98 | Case-insensitive merchant search on GET /api/transactions (§16) | [x] |
 | 99 | `/transactions` page, filter bar, paginated table (§16) | [x] |
 | 100 | Inline edit + delete on transaction rows (§16) | [x] |
-| 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [ ] |
+| 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3658,16 +3658,18 @@ model AppSettings {
 - `TransactionsUnavailable(): JSX.Element` — placeholder card in surface-low, no border (CONSTRAINT-05).
 
 **Acceptance criteria:**
-- [ ] Sidebar shows a "Transactions" item linking to /transactions; active-state highlight works on that route; Sidebar test item count updated 8 → 9.
-- [ ] In demo mode, /transactions renders the "Available when running locally" placeholder and makes NO call to GET /api/transactions — never an error (PRD §16).
-- [ ] In non-demo, the page renders per request (connection() gate), not a stale static prerender.
-- [ ] The dead Income "View All Entries" link is removed entirely (no anchor, no inert span); income.test.tsx updated to assert it's gone. No unused imports left.
-- [ ] Spending "View All" link unchanged. CONSTRAINT-05 placeholder uses dark surface tokens, no border. CQ-02 TransactionsUnavailable < 200 lines.
+- [x] Sidebar shows a "Transactions" item linking to /transactions; active-state highlight works on that route; Sidebar test item count updated 8 → 9.
+- [x] In demo mode, /transactions renders the "Available when running locally" placeholder and makes NO call to GET /api/transactions — never an error (PRD §16).
+- [x] In non-demo, the page renders per request (connection() gate), not a stale static prerender.
+- [x] The dead Income "View All Entries" link is removed entirely (no anchor, no inert span); income.test.tsx updated to assert it's gone. No unused imports left.
+- [x] Spending "View All" link unchanged. CONSTRAINT-05 placeholder uses dark surface tokens, no border. CQ-02 TransactionsUnavailable < 200 lines.
 
 **Tests required:**
 - `describe('Sidebar')` → `it('renders a Transactions link to /transactions and keeps all items in order')` (EXPECTED → 9) [happy]
 - `describe('IncomeTransactionList')` → `it('no longer renders a View All Entries affordance')` [happy]
 - `describe('TransactionsUnavailable / demo')` → `it('renders the placeholder and issues no fetch in demo mode')` [guard]
+
+**Session 45 (2026-06-04) — IMPLEMENTED:** Added a `Transactions` Sidebar item (Receipt icon, `/transactions`) after Spending (test 8→9). `transactions/page.tsx` now `if (isDemoMode()) return <TransactionsUnavailable />` BEFORE `await connection()` + `db.account.findMany` — the demo static export (api routes stashed) never touches `/api/transactions` and never errors; non-demo renders per-request (FB-26). Created `TransactionsUnavailable.tsx` (32, surface-low card, no border). Removed the dead Income "View All Entries" link + now-unused `Link`/`isDemoMode` imports + `DISABLED_LINK_TOOLTIP`; Spending "View All" untouched. Deviation (sound): split the demo guard into an explicit early-return (vs `/review`+`/settings`' `if (!isDemoMode()) await connection()` one-liner) because the demo branch renders different UI — semantically identical gating. 3 tests added/updated. Orchestrator re-ran FULL suite (65 files / 383 tests green — net −1 from removed dead-link income tests) + `tsc --noEmit` clean + reviewed page.tsx/placeholder. `next lint` not usable non-interactively in this repo; tsc-clean confirms no dangling refs. Demo static-export build itself runs in CI (`deploy-demo.yml`, triggered on push to main) — verify the Action is green post-push. **Merged to `main`** (commit `f157cb0`, merge `7000ae7`; feat branch deleted).
 
 **Depends on:** Task 99 and Task 100
 **Specialist:** @ui-amibroke · @write-tests
