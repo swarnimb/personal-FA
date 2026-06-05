@@ -109,7 +109,7 @@
 | 96 | Stale-balance warning on Accounts card "As of" line (§7.2) | [x] |
 | 97 | Split `ConnectedInstitutions.tsx` (CQ-01 + CQ-02 refactor) | [x] |
 | 98 | Case-insensitive merchant search on GET /api/transactions (§16) | [x] |
-| 99 | `/transactions` page, filter bar, paginated table (§16) | [ ] |
+| 99 | `/transactions` page, filter bar, paginated table (§16) | [x] |
 | 100 | Inline edit + delete on transaction rows (§16) | [ ] |
 | 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [ ] |
 
@@ -3584,18 +3584,20 @@ model AppSettings {
 - `TransactionTable({ transactions }): JSX.Element` — amount cell uses `<PrivacyAmount cents={Math.abs(tx.amountCents)} />` with sign + color by `amountCents >= 0` (+/text-primary vs −/text-tertiary). Account column resolves name from accountId.
 
 **Acceptance criteria:**
-- [ ] `/transactions` renders a paginated table (date · merchant · category · account · amount), newest-first, 20 rows/page.
-- [ ] Filters: date-range PRESET selector (6 buttons, matching the app-wide TimeRangeSelector), account, category, status, merchant search; changing ANY filter resets to page 1 and reflects in the URL querystring.
-- [ ] Pager driven by total/pageSize; disabled at bounds.
-- [ ] CALC-05: amounts via PrivacyAmount (cents→dollars at render only, never divided in TS); sign preserved; positive text-primary, negative text-tertiary; Privacy mode masks all amounts.
-- [ ] CONSTRAINT-17 surfacing: a 400 from the API shows a toast, not a crash (useToast); EH-01 — fetch failures set a loud, contextful error in state.
-- [ ] CONSTRAINT-04 desktop-only (1280px+), no mobile breakpoints. CONSTRAINT-05 Velvet Ledger dark surfaces, NO borders/divide- for separation (row hover surface-highest, header surface-low).
-- [ ] CQ-02 every new component file < 200 lines; CQ-01 handlers < 50 logic lines. No default exports; Prisma never imported into a client component.
+- [x] `/transactions` renders a paginated table (date · merchant · category · account · amount), newest-first, 20 rows/page.
+- [x] Filters: date-range PRESET selector (6 buttons, matching the app-wide TimeRangeSelector), account, category, status, merchant search; changing ANY filter resets to page 1 and reflects in the URL querystring.
+- [x] Pager driven by total/pageSize; disabled at bounds.
+- [x] CALC-05: amounts via PrivacyAmount (cents→dollars at render only, never divided in TS); sign preserved; positive text-primary, negative text-tertiary; Privacy mode masks all amounts.
+- [x] CONSTRAINT-17 surfacing: a 400 from the API shows a toast, not a crash (useToast); EH-01 — fetch failures set a loud, contextful error in state.
+- [x] CONSTRAINT-04 desktop-only (1280px+), no mobile breakpoints. CONSTRAINT-05 Velvet Ledger dark surfaces, NO borders/divide- for separation (row hover surface-highest, header surface-low).
+- [x] CQ-02 every new component file < 200 lines; CQ-01 handlers < 50 logic lines. No default exports; Prisma never imported into a client component.
 
 **Tests required:**
 - `describe('TransactionBrowser')` → `it('renders fetched transactions and resets to page 1 when a filter changes')` [happy]
 - `describe('TransactionBrowser')` → `it('shows an error/toast and no crash when the fetch returns non-OK')` [error]
 - `describe('TransactionTable')` → `it('renders sign + PrivacyAmount per row, preserving negative/positive color')` [happy]
+
+**Session 45 (2026-06-04) — IMPLEMENTED:** Created `(main)/transactions/page.tsx` (21, server — active-accounts fetch, Prisma server-side only), `TransactionBrowser.tsx` (170, client — URL-driven filters+page, cancellation-guarded effect fetch, 400→toast / fetch-fail→loud `TransactionFetchError`, bounded pager), `TransactionTable.tsx` (100, `PrivacyAmount cents={Math.abs}` + sign/color, surface-shift styling no borders), `TransactionFilters.tsx` (150, 6-button range preset + account/category/status Selects + debounced merchant Input). All < 200 (CQ-02), handlers < 50 (CQ-01), named exports (page default is Next-mandated). Micro-decisions: Radix Select uses an internal `__all__` sentinel for "All" (mapped back to '' → param deleted, clean URL); status options hardcoded `['confirmed','pending']` to match the `TransactionStatus` enum (no shared UI constant exists — flagged for a possible future constant). 3 tests added. Orchestrator re-ran FULL suite (63 files / 381 tests green) + `tsc --noEmit` clean + reviewed page/Browser/Table. **Merged to `main`** (commit `52d3cb2`, merge `63e062f`; feat branch deleted). `@security`/`@code-review` deferred to end-of-feature gate after T101, per Session 44 handoff.
 
 **Depends on:** Task 98
 **Specialist:** @ui-amibroke · @write-tests
