@@ -9,13 +9,15 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/',
 }))
 
-// The builder-approved append-only order (NOT the PRD's literal order):
-// Net Worth stays 2nd; Settings + Review are appended at the end.
+// The builder-approved nav order. Net Worth stays 2nd; Settings + Review
+// remain at the end. T101 inserts "Transactions" after "Spending" (its
+// natural IA home, next to the other transaction-related tabs).
 const EXPECTED = [
   { label: 'Dashboard', href: '/' },
   { label: 'Net Worth', href: '/net-worth' },
   { label: 'Income', href: '/income' },
   { label: 'Spending', href: '/spending' },
+  { label: 'Transactions', href: '/transactions' },
   { label: 'Investments', href: '/investments' },
   { label: 'Accounts', href: '/accounts' },
   { label: 'Settings', href: '/settings' },
@@ -43,21 +45,26 @@ describe('Sidebar', () => {
     )
   })
 
-  it('renders all 8 nav items in the correct append-only order', () => {
+  it('renders a Transactions link to /transactions and keeps all items in order', () => {
     render(<Sidebar />)
     const links = screen.getAllByRole('link')
     expect(links).toHaveLength(EXPECTED.length)
+    expect(EXPECTED).toHaveLength(9)
     EXPECTED.forEach((item, i) => {
       expect(links[i]).toHaveTextContent(item.label)
       expect(links[i]).toHaveAttribute('href', item.href)
     })
+    expect(screen.getByRole('link', { name: /transactions/i })).toHaveAttribute(
+      'href',
+      '/transactions',
+    )
   })
 
-  it('keeps the 6 original nav items unchanged (labels, hrefs, order)', () => {
+  it('keeps the original dashboard/income/spending nav items unchanged (labels, hrefs, order)', () => {
     render(<Sidebar />)
     const links = screen.getAllByRole('link')
-    const original = EXPECTED.slice(0, 6)
-    original.forEach((item, i) => {
+    const firstFive = EXPECTED.slice(0, 5)
+    firstFive.forEach((item, i) => {
       expect(links[i]).toHaveTextContent(item.label)
       expect(links[i]).toHaveAttribute('href', item.href)
     })
