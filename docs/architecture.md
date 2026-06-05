@@ -541,3 +541,26 @@ The `/review` and `/settings` page server components read no `searchParams` or `
 - **Multi-provider LLM (V1.2 candidate):** refactor `src/lib/anthropic.ts` → `src/lib/llm/anthropic.ts` + sibling provider modules behind a shared `LLMClient` interface. `AppSettings` adds an `aiProvider` enum column. Bounded refactor; no schema break.
 - **AI features beyond categorization (V2 candidate — explicitly out of scope for V1.1):** any new LLM use case (insights, summarization, etc.) cannot reuse `anthropic.ts` as-is per CONSTRAINT-16. Each new use case requires its own privacy disclosure, consent gate, and prompt module — by design.
 - **Normalization algorithm changes:** `MerchantRule.normalizedMerchant` PK changes require a re-key migration (compute new normalized form for all rules; merge duplicates with newest-wins). Documented as an architectural implication in `docs/assumptions.md` (A-13).
+
+---
+
+## Transaction Browser (V1.2, §16)
+
+A sidebar-only global page (`/transactions`) listing every transaction with filters (date-range preset, account, category, status, merchant search), pagination, and inline edit/delete. It is the only surface that shows `Transfer Out` rows (excluded from both Spending and Income) and the only place to edit/delete an arbitrary transaction or search by merchant. Built T98–T101 (Session 45); `@code-review` PASS, `@security` CLEAR, `@qa` APPROVED.
+
+### Client-side fetch divergence (the one architectural decision here — see FB-29)
+
+Unlike every other tab — which fetches on the server via a `lib/*-queries.ts` module — the Transaction Browser page is a thin server component that fetches only the active-account list, then hands off to a **client** component (`TransactionBrowser`) that reads its filter + page state from the URL querystring and fetches `GET /api/transactions` in a `useEffect`. Rationale: filters and pagination are interactive, URL-driven state; the `/api/transactions` endpoint already exists (no query duplication); and a server round-trip per filter keystroke would be worse UX than a debounced client fetch. The trade-off is that this page does not use the CONSTRAINT-13 shared-query-module pattern — acceptable because it performs no financial *calculation* (it reads rows the API already returns); CALC-01/02 are unaffected.
+
+### Read / write paths
+
+- **Read:** `GET /api/transactions` (T98 added a case-insensitive `merchant` `contains` filter + enum-allow-listed `status`; range/accountId/category compose in one Prisma `where`; pageSize 20, `orderBy date desc`).
+- **Write:** inline edit/delete call the pre-existing `PATCH`/`DELETE /api/transactions/[id]` via `useTransactionMutation` (mirrors `useAccountMutation`: demo short-circuit, named error → toast, `router.refresh`). PATCH body **never includes `updateRule`** — single-transaction edit only, no MerchantRule upsert / retroactive re-categorization (PRD §16).
+
+### Demo handling
+
+`transactions/page.tsx` returns `<TransactionsUnavailable>` (an "Available when running locally" card) when `isDemoMode()` — **before** any `db`/`connection()` call — then `await connection()` for per-request render otherwise. Same FB-26 ordering as `/review` + `/settings`; the static export (api routes stripped) never reaches the API.
+
+### Known limitation
+
+Table dates render via `new Date(tx.date).toLocaleDateString(...)` (local TZ) while the edit modal pre-fills via `tx.date.split('T')[0]` (UTC date portion), so a transaction can show one day apart between table and editor in non-UTC zones. This is a **pre-existing, app-wide** convention (identical in Spending/Income/Pending lists + EditPendingModal), not introduced here; saving is idempotent (no corruption). Tracked for a future app-wide date-normalization task. See `docs/qa-report.md`.

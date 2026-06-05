@@ -448,3 +448,18 @@
 **Check before approving:** Threshold is 7 days — accounts synced within the past week look unchanged. Reused the existing soft-red caution color (the same one as "Needs review") rather than adding a new palette token.
 
 **What this closes off:** Nothing structural — pure display logic, fully reversible. Deferred: a Dashboard/Net Worth aggregate stale cue and a configurable threshold.
+
+---
+
+## FB-29: Transaction Browser Fetches Client-Side (Not Server-Side Like Other Tabs)
+
+**Date:** 2026-06-04
+**Architecture section:** `docs/architecture.md` § Transaction Browser (V1.2, §16); PRD §16
+
+**Decided:** The new `/transactions` page loads its rows in the browser (a client component calls the existing `/api/transactions` endpoint as you change filters), instead of on the server like every other tab. The server still does the initial page render and supplies the account list; only the transaction rows themselves are fetched live in the browser.
+
+**Means for your product:** Filters and page changes feel instant and are shareable/bookmarkable (they live in the URL) without a full server round-trip on every keystroke. Functionally identical data; just a snappier filter experience on this one heavily-interactive page.
+
+**Check before approving:** This is the only page that works this way — a deliberate exception, not a new default. It reads data the API already returns (no financial math happens in the browser), so the "all calculations in PostgreSQL" guarantee (CALC-01) is untouched. If a future tab needs the same live-filter feel, this is the pattern to copy.
+
+**What this closes off:** Nothing — fully reversible. If desired later, the page could be converted to server-fetch with server-driven pagination; the API contract wouldn't change.
