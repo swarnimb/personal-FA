@@ -108,6 +108,10 @@
 | 95 | Account balance "As of" timestamp (§7.1) | [x] |
 | 96 | Stale-balance warning on Accounts card "As of" line (§7.2) | [x] |
 | 97 | Split `ConnectedInstitutions.tsx` (CQ-01 + CQ-02 refactor) | [x] |
+| 98 | Case-insensitive merchant search on GET /api/transactions (§16) | [x] |
+| 99 | `/transactions` page, filter bar, paginated table (§16) | [ ] |
+| 100 | Inline edit + delete on transaction rows (§16) | [ ] |
+| 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [ ] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3544,16 +3548,18 @@ model AppSettings {
 - `GET(req: Request): Promise<Response>` (existing) — add to the inline `where`: `...(merchant ? { merchant: { contains: merchant, mode: 'insensitive' } } : {})` where `merchant = searchParams.get('merchant')?.trim()`. Empty/whitespace-only merchant adds NO clause. Keep range/accountId/category/status/page + pageSize=20 byte-identical. Keep `isDemoMode() → demoNotFound()` as the first statement.
 
 **Acceptance criteria:**
-- [ ] `?merchant=trader` matches `"TRADER JOES"` (Prisma `contains` + `mode:'insensitive'`), verified via the mocked `db.transaction.findMany`/`count` `where` argument.
-- [ ] Empty/whitespace-only merchant param adds no merchant clause (where has no `merchant` key).
-- [ ] Merchant filter composes with accountId + category + status + range in one `where`.
-- [ ] Response envelope `{ data: { transactions, total, page, pageSize } }` unchanged; pageSize 20; `orderBy: { date: 'desc' }` unchanged.
-- [ ] Demo posture unchanged: `isDemoMode()` returns `demoNotFound()` (404) before any DB access.
-- [ ] EH-01: invalid `range` still returns existing structured 400; no new throw paths. CQ-01: GET stays < 50 logic lines.
+- [x] `?merchant=trader` matches `"TRADER JOES"` (Prisma `contains` + `mode:'insensitive'`), verified via the mocked `db.transaction.findMany`/`count` `where` argument.
+- [x] Empty/whitespace-only merchant param adds no merchant clause (where has no `merchant` key).
+- [x] Merchant filter composes with accountId + category + status + range in one `where`.
+- [x] Response envelope `{ data: { transactions, total, page, pageSize } }` unchanged; pageSize 20; `orderBy: { date: 'desc' }` unchanged.
+- [x] Demo posture unchanged: `isDemoMode()` returns `demoNotFound()` (404) before any DB access.
+- [x] EH-01: invalid `range` still returns existing structured 400; no new throw paths. CQ-01: GET stays < 50 logic lines.
 
 **Tests required:**
 - `describe('GET /api/transactions')` → `it('filters by merchant case-insensitively (contains + insensitive mode)')` [happy]
 - `describe('GET /api/transactions')` → `it('ignores an empty merchant param (no merchant clause)')` [edge]
+
+**Session 45 (2026-06-04) — IMPLEMENTED:** Added `const merchant = searchParams.get('merchant')?.trim()` + `...(merchant ? { merchant: { contains: merchant, mode: 'insensitive' as const } } : {})` to the inline `where` (net +2 lines in route.ts; everything else byte-identical). `as const` required so TS doesn't widen `'insensitive'` past Prisma's `QueryMode` — pure type assertion, no runtime change. 2 tests appended to existing `describe('GET /api/transactions')`. Orchestrator re-ran full suite (62 files / 378 tests green) + `tsc --noEmit` clean + diff-reviewed. GET ≈17 logic lines (CQ-01 ✓). **Merged to `main`** (commit `2d522e2`, merge `665e6e9`; feat branch deleted). `@security`/`@code-review` deferred to end-of-feature gate (after T101), per Session 44 handoff.
 
 **Depends on:** None
 **Specialist:** @write-tests
