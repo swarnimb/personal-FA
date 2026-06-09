@@ -72,6 +72,8 @@ Live browser verification run against a fresh `next dev` server (port 3001) on t
 
 ### NON-BLOCKING — Transaction date shows one day earlier in the table than in the edit modal
 
+> **RESOLVED 2026-06-09 (Task 102, Session 47).** Added `formatDateUTC` (UTC-anchored) to `src/lib/format.ts` and routed all transaction tables/lists, both charts, and the dashboard month-label queries through it; table dates now agree with the edit modal. Codified as CONSTRAINT-20. (`AddTransactionModal` "today" default off-by-one near midnight is a separate, still-open minor item — possible future T103.)
+
 **Founder Brief**
 **Decided:** The date a transaction shows in the table (e.g. "May 31, 2026") can differ by one day from the date shown when you open it to edit ("2026-06-01").
 **Means for your product:** Mild confusion — the two views of the same transaction's date disagree by a day in non-UTC timezones. No data is lost: saving without touching the date keeps the stored value unchanged.

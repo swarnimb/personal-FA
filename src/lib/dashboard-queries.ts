@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getDateRange, VALID_RANGES, type RangeKey } from '@/lib/date-range'
 import { SPENDING_EXCLUDED_CATEGORIES } from '@/lib/categories'
+import { formatDateUTC } from '@/lib/format'
 
 /**
  * Bundle of one dataset per RangeKey. Used by demo-mode pages that bake every
@@ -131,8 +132,8 @@ export async function getNetWorthHistory(
   `)
   return rows.map((r) => ({
     month: isMax
-      ? new Date(r.month).toLocaleDateString('en-US', { year: 'numeric' })
-      : new Date(r.month).toLocaleDateString('en-US', { month: 'short' }),
+      ? formatDateUTC(r.month, { year: 'numeric' })
+      : formatDateUTC(r.month, { month: 'short' }),
     netWorthCents: Number(r.netWorthCents),
   }))
 }
@@ -243,8 +244,8 @@ export async function getCashFlowTrend(
   `)
   return rows.map((r) => ({
     month: isMax
-      ? new Date(r.month).toLocaleDateString('en-US', { year: 'numeric' })
-      : new Date(r.month).toLocaleDateString('en-US', { month: 'short' }),
+      ? formatDateUTC(r.month, { year: 'numeric' })
+      : formatDateUTC(r.month, { month: 'short' }),
     liquidCashCents: Number(r.liquidCashCents),
   }))
 }

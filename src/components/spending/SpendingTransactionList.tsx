@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SELECTABLE_CATEGORIES_SORTED } from '@/lib/categories'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
+import { formatDateUTC } from '@/lib/format'
 import { AddTransactionModal } from '@/components/transactions/AddTransactionModal'
 import { UpdateRulePrompt } from '@/components/spending/UpdateRulePrompt'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
@@ -219,7 +220,7 @@ export function SpendingTransactionList({
                       )}
                     </td>
                     <td className="px-3 py-3 font-inter text-xs text-on-surface-variant whitespace-nowrap">
-                      {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatDateUTC(tx.date, { month: 'short', day: 'numeric' })}
                     </td>
                     <td className="px-6 py-3 text-right font-manrope font-semibold text-sm text-tertiary whitespace-nowrap">
                       −<PrivacyAmount cents={Math.abs(tx.amountCents)} />

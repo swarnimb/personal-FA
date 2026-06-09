@@ -12,6 +12,15 @@ export function formatCentsPrecise(cents: number): string {
 }
 
 /**
+ * Formats a date-only / midnight-UTC value (e.g. a Prisma @db.Date serialized as
+ * 2026-06-01T00:00:00.000Z) as its true calendar day, regardless of host timezone.
+ * Forces timeZone:'UTC' so the date never shifts to the prior/next local day.
+ */
+export function formatDateUTC(value: string | Date, options: Intl.DateTimeFormatOptions): string {
+  return new Date(value).toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })
+}
+
+/**
  * Hybrid balance-freshness label for a per-account "As of" line.
  *
  * Recent times read as relative ("Just now", "5m ago", "3h ago"); anything a

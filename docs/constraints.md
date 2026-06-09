@@ -242,6 +242,18 @@
 
 ---
 
+### CONSTRAINT-20: Date-only (`@db.Date`) values are formatted for display via `formatDateUTC`
+
+**Decision:** Any `@db.Date` value (`Transaction.date`, `Transaction.scheduledDate`, `BalanceSnapshot.date`, and SQL `day`/`month` aggregates derived from them) is rendered for display through `formatDateUTC` in `src/lib/format.ts`, which forces `timeZone: 'UTC'`. Never render a date-only value with a raw `new Date(x).toLocaleDateString(...)` — that interprets the serialized midnight-UTC instant in the host's local timezone and shifts the calendar day (one day earlier at negative-offset zones such as US Central, UTC−6).
+
+**What it means in practice:** When adding any date to a table, list, chart axis, or label, call `formatDateUTC(value, { ...options })` and pass the per-view Intl options. Edit-modal date inputs continue to use the date portion verbatim (`.split('T')[0]`) — also UTC-anchored, so table and editor agree. Do not introduce a fresh inline `toLocaleDateString` for a stored date.
+
+**Who decided and when:** Task 102 / Session 47, builder approved 2026-06-09. Codifies the fix for the app-wide table-vs-modal date offset (the bug spread to 7 sites precisely because the convention was never written down).
+
+**What this closes off:** Prevents the off-by-one display drift from re-appearing in any future date-rendering work. Does not change storage (dates remain `@db.Date`) or the edit-modal contract.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -265,3 +277,4 @@
 | 17 | LLM responses validated against allowed-values list | Out-of-list responses dropped with LOUD log, never accepted as data | @cto / V1.1 Phase 2 / FB-22 / builder | 2026-05-23 |
 | 18 | Investment/Crypto value from live `Account` balance; daily `BalanceSnapshot` for history only | Value/allocation read `currentBalanceCents`, never aggregate snapshots; sync writes one snapshot/day/account for the history chart | Session 39 / builder | 2026-06-04 |
 | 19 | CQ-01 measured on logic, not JSX render bodies | Extract logic to pass CQ-01; don't fragment JSX for line count | Session 43 / T97 / builder | 2026-06-04 |
+| 20 | Date-only (`@db.Date`) display via `formatDateUTC` | Render stored dates with `formatDateUTC` (UTC-anchored); never raw `new Date(x).toLocaleDateString()` | Task 102 / Session 47 / builder | 2026-06-09 |

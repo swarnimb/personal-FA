@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
 import { cn } from '@/lib/utils'
+import { formatDateUTC } from '@/lib/format'
 import { EditTransactionModal } from '@/components/transactions/EditTransactionModal'
 import { useTransactionMutation } from '@/components/transactions/useTransactionMutation'
 import type { BrowserTransaction } from '@/components/transactions/TransactionTable'
@@ -36,7 +37,7 @@ export function TransactionRow({
   return (
     <tr className="group hover:bg-surface-highest transition-colors duration-150">
       <td className="px-6 py-3 font-inter text-sm text-on-surface-variant whitespace-nowrap">
-        {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        {formatDateUTC(tx.date, { month: 'short', day: 'numeric', year: 'numeric' })}
       </td>
       <td className="px-3 py-3 font-inter text-sm text-on-surface truncate max-w-[220px]">{tx.merchant}</td>
       <td className="px-3 py-3">

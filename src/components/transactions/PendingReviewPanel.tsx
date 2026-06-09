@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
+import { formatDateUTC } from '@/lib/format'
 import { EditPendingModal } from './EditPendingModal'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -97,7 +98,7 @@ export function PendingReviewPanel({
                     <div className="flex-1 min-w-0">
                       <p className="font-inter text-sm text-on-surface truncate">{tx.merchant}</p>
                       <p className="font-inter text-xs text-on-surface-variant mt-0.5">
-                        {new Date(tx.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {formatDateUTC(tx.scheduledDate, { month: 'short', day: 'numeric' })}
                         {' · '}{tx.category}{' · '}{tx.accountName}
                       </p>
                     </div>

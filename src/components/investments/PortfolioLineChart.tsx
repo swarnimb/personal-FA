@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
+import { formatDateUTC } from '@/lib/format'
 
 type HistoryPoint = { date: string; valueCents: number }
 
@@ -62,8 +63,8 @@ export function PortfolioLineChart({ data, isMax = false }: { data: HistoryPoint
   const formatted = data.map((d) => ({
     ...d,
     label: isMax
-      ? new Date(d.date).toLocaleDateString('en-US', { year: 'numeric' })
-      : new Date(d.date).toLocaleDateString('en-US', { month: 'short' }),
+      ? formatDateUTC(d.date, { year: 'numeric' })
+      : formatDateUTC(d.date, { month: 'short' }),
   }))
 
   return (

@@ -1,5 +1,6 @@
 import { CheckCircle } from 'lucide-react'
 import { PrivacyAmount } from '@/components/ui/PrivacyAmount'
+import { formatDateUTC } from '@/lib/format'
 
 type Transaction = {
   id: string
@@ -57,7 +58,7 @@ export function IncomeTransactionList({ transactions }: { transactions: Transact
               <div className="flex items-center gap-2 mt-1">
                 <CategoryBadge category={tx.category} />
                 <span className="font-inter text-xs text-on-surface-variant">
-                  {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {formatDateUTC(tx.date, { month: 'short', day: 'numeric' })}
                 </span>
               </div>
             </div>

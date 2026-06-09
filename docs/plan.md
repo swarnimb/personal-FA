@@ -112,6 +112,7 @@
 | 99 | `/transactions` page, filter bar, paginated table (§16) | [x] |
 | 100 | Inline edit + delete on transaction rows (§16) | [x] |
 | 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [x] |
+| 102 | Normalize app-wide date display to UTC (date-offset fix) | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3673,3 +3674,52 @@ model AppSettings {
 
 **Depends on:** Task 99 and Task 100
 **Specialist:** @ui-amibroke · @write-tests
+
+---
+
+# V1.2 — Date Normalization (Task 102)
+
+> Added 2026-06-09 by `@create-plan` (treated as a bug-fix/tech-debt task, not a PRD feature — no product surface, one correct behavior). Source: `docs/qa-report.md` NON-BLOCKING finding (table-vs-modal date offset). Scoped Session 47 (full scope: transaction sites + charts).
+
+---
+
+## Task 102: Normalize app-wide date display to UTC (kill the one-day table/chart offset)
+
+**Why:** `Transaction.date`, `Transaction.scheduledDate`, and `BalanceSnapshot.date` are `@db.Date` (date-only, no time). Prisma reads them back as midnight-UTC ISO (`2026-06-01T00:00:00.000Z`) and the API serializes them that way. Table/list/chart sites render with `new Date(x).toLocaleDateString(...)`, which interprets that midnight-UTC instant in the host's **local** timezone — at UTC−6 (the builder's machine, CST) midnight UTC is 6 PM the previous day, so every table date renders **one day early** ("May 31" for a `2026-06-01` transaction). Edit modals read `tx.date.split('T')[0]` (verbatim UTC date portion) and are already correct, so the table and the edit view of the same transaction disagree by a day. The stored value is date-only — the date *is* the fact; there is no time-of-day to honor — so the only correct behavior is to format in UTC at every display site. Confirmed reproducing on the builder's machine (US Central, UTC−6).
+
+**Files:**
+- `src/lib/format.ts` — modify (add `formatDateUTC`; currency formatters already live here)
+- `src/components/transactions/TransactionRow.tsx` — modify (~line 39 — keep "Jun 9, 2026" with year)
+- `src/components/spending/SpendingTransactionList.tsx` — modify (~line 222 — keep "Jun 9", no year)
+- `src/components/income/IncomeTransactionList.tsx` — modify (~line 60 — keep "Jun 9", no year)
+- `src/components/transactions/PendingReviewPanel.tsx` — modify (~line 100 — `scheduledDate`, may be null — guard at caller)
+- `src/components/dashboard/NetWorthLineChart.tsx` — modify (~lines 57–58 — month "Jun" / year "2026")
+- `src/components/dashboard/PortfolioLineChart.tsx` — modify (~lines 65–66 — month "Jun" / year "2026")
+- `src/lib/dashboard-queries.ts` — modify (~lines 134–135, 246–247 — server-side month labels; confirm `month` value shape is date/date-string)
+- `src/lib/__tests__/format.test.ts` (or co-located test) — add `formatDateUTC` tests
+- **Out of scope — DO NOT change:** `EditTransactionModal.tsx`, `EditPendingModal.tsx` (already correct, `.split('T')[0]`). `AddTransactionModal.tsx` "today" default (different root cause — wants *local* today; track separately as a future T103 if noticed).
+
+**Functions to implement:**
+- `formatDateUTC(value: string | Date, options: Intl.DateTimeFormatOptions): string` — formats `value` with `toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })` so a date-only / midnight-UTC value renders its true calendar day regardless of host timezone. Single shared helper; each call site passes its own `options` (with-year / no-year / month-only / year-only) so per-view formats are preserved. CQ-01: < 50 lines.
+
+**Acceptance criteria:**
+- [x] `formatDateUTC` force-injects `timeZone: 'UTC'`; input `'2026-06-01T00:00:00.000Z'` renders **"Jun 1"** (not "May 31") on any host timezone, including UTC−6.
+- [x] All 4 transaction sites (TransactionRow, SpendingTransactionList, IncomeTransactionList, PendingReviewPanel) use `formatDateUTC`; the table date now matches the edit modal for the same transaction.
+- [x] Both charts (NetWorthLineChart, PortfolioLineChart) and both `dashboard-queries.ts` month labels use `formatDateUTC`; a month-boundary snapshot labels under the correct month.
+- [x] Per-view formats preserved exactly: TransactionRow "Jun 9, 2026" (with year); Spending/Income/Pending "Jun 9" (no year); charts "Jun" / "2026".
+- [x] Edit modals untouched and still correct.
+- [x] No inline `new Date(x).toLocaleDateString(...)` left at any transaction/list/chart display site (all routed through `formatDateUTC`).
+- [x] CONSTRAINT-19: CQ-01 measured on logic, not JSX. CONSTRAINT-05: no visual/border changes.
+- [x] `tsc --noEmit` clean; `npm run build` PASS.
+
+**Tests required:**
+- `describe('formatDateUTC')` → `it('renders the UTC calendar day for a midnight-UTC value')` — assert with-year, no-year, month-only, year-only option sets [happy]
+- `describe('formatDateUTC')` → `it('is timezone-stable — never shifts to the prior day')` — midnight-UTC input renders the same day independent of host TZ (the core regression guard) [regression]
+- `describe('formatDateUTC')` → `it('handles invalid/empty input')` — decide: util expects a valid value; nullable `scheduledDate` guarded at the caller [error case]
+- Update any existing component tests that assert the **old shifted dates** ("May 31" → "Jun 1") — failing on the corrected output is the fix working, not a regression.
+
+**Session 47 (2026-06-09) — IMPLEMENTED:** Added `formatDateUTC(value, options)` to `src/lib/format.ts` (forces `timeZone:'UTC'`, JSDoc'd). Swapped 7 display sites to it: `TransactionRow` (tx.date, with-year), `SpendingTransactionList` / `IncomeTransactionList` / `PendingReviewPanel` (no-year; Pending uses non-nullable `scheduledDate`), `NetWorthLineChart` + `PortfolioLineChart` (both `d.date`, isMax year / else month), and `dashboard-queries.ts` `getNetWorthHistory` + `getCashFlowTrend` (both `r.month` = `day::text` string). Format options preserved verbatim everywhere — output identical except the corrected day. Modals + `AddTransactionModal` untouched (correct / out of scope). Tests added in `src/__tests__/unit/format.test.ts` (`describe('formatDateUTC')`: all four option sets assert literal 'Jun 1, 2026' / 'Jun 1' / 'Jun' / '2026' as the prior-day-shift regression guard on this CST host + a Date-object case). No existing test asserted an old shifted date, so none needed updating. Orchestrator (@dev) independently verified: full suite **65 files / 386 tests green**, `tsc --noEmit` clean, `npm run build` PASS. **Not yet committed** — pending `@code-review`. Specialist note: `@ui-amibroke` listed but no design decision involved (zero visual change), so standard implementation applied.
+
+**Depends on:** None
+**Specialist:** @ui-amibroke — display rendering (Velvet Ledger); formatter logic is plain TS
+**Completed:** 2026-06-09 (built + verified; commit pending `@code-review`)
