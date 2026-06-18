@@ -5,6 +5,15 @@ import { RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { isDemoMode, DEMO_TOAST_COPY } from '@/lib/demo-mode'
 import { useToast } from '@/components/ui/ToastProvider'
+import { pollSyncStatus } from '@/components/accounts/pollSyncStatus'
+import type { SyncLog } from '@prisma/client'
+
+/** Maps a completed sync log's status to its user-facing toast copy. */
+function syncOutcomeToast(status: SyncLog['status']): string {
+  return status === 'success'
+    ? 'Accounts synced.'
+    : 'Sync finished with errors.'
+}
 
 /**
  * Sync status summary panel showing connection counts, last update time,
@@ -31,8 +40,16 @@ export function SyncStatusPanel({
     }
     setSyncing(true)
     try {
-      await fetch('/api/sync', { method: 'POST' })
+      const res = await fetch('/api/sync', { method: 'POST' })
+      const { data } = (await res.json()) as { data: { syncLogId: string } }
+      const log = await pollSyncStatus(data.syncLogId)
       router.refresh()
+      toast.show(syncOutcomeToast(log.status))
+    } catch (err) {
+      // EH-01: surface the failure visibly AND log it loudly with context —
+      // the sync may still be running in the background.
+      console.error('[sync-refresh] poll failed:', err instanceof Error ? err.message : String(err))
+      toast.show('Sync is still running in the background — check back shortly.')
     } finally {
       setSyncing(false)
     }

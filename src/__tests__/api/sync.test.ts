@@ -10,6 +10,7 @@ vi.mock('@/lib/db', () => ({
   db: {
     syncLog: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
     },
   },
 }))
@@ -57,11 +58,33 @@ describe('GET /api/sync/status', () => {
     }
     vi.mocked(db.syncLog.findFirst).mockResolvedValue(mockLog as never)
 
-    const response = await GET()
+    const response = await GET(new Request('http://localhost/api/sync/status'))
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(body.data.id).toBe('log-1')
     expect(body.data.status).toBe(SyncStatus.success)
+  })
+
+  it('returns the exact SyncLog when ?id is supplied', async () => {
+    const mockLog = {
+      id: 'log-42',
+      status: SyncStatus.partial,
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      accountsSynced: 1,
+      transactionsInserted: 0,
+      transactionsUpdated: 0,
+      errors: ['boom'],
+    }
+    vi.mocked(db.syncLog.findUnique).mockResolvedValue(mockLog as never)
+
+    const response = await GET(new Request('http://localhost/api/sync/status?id=log-42'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(db.syncLog.findUnique).toHaveBeenCalledWith({ where: { id: 'log-42' } })
+    expect(db.syncLog.findFirst).not.toHaveBeenCalled()
+    expect(body.data.id).toBe('log-42')
   })
 })

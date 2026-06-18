@@ -10,7 +10,8 @@ import { ConnectBankModal } from '../../components/accounts/ConnectBankModal'
 import { AddExchangeModal } from '../../components/accounts/AddExchangeModal'
 import { CSVImportModal } from '../../components/accounts/CSVImportModal'
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
+const refreshMock = vi.fn()
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: refreshMock }) }))
 
 // Radix UI requires these pointer/scroll APIs that jsdom does not implement
 beforeAll(() => {
@@ -23,7 +24,25 @@ beforeAll(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  refreshMock.mockClear()
 })
+
+/**
+ * Builds a fetch stub for SyncStatusPanel: the POST returns the given
+ * syncLogId, then each subsequent status GET returns the next queued row.
+ * The final row repeats once the queue is drained.
+ */
+function stubSyncFetch(syncLogId: string, statusRows: Array<Record<string, unknown>>) {
+  let call = 0
+  return vi.fn(async (url: string, init?: { method?: string }) => {
+    if (init?.method === 'POST') {
+      return { ok: true, json: async () => ({ data: { syncLogId } }) }
+    }
+    const row = statusRows[Math.min(call, statusRows.length - 1)]
+    call += 1
+    return { ok: true, json: async () => ({ data: row }) }
+  })
+}
 
 const MOCK_ALL_ACCOUNTS = [
   { id: 'acc-1', name: 'Checking' },
@@ -66,6 +85,68 @@ describe('SyncStatusPanel', () => {
 
   it('renders Refresh All button', () => {
     render(<ToastProvider><SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={null} /></ToastProvider>)
+    expect(screen.getByRole('button', { name: /refresh all/i })).toBeInTheDocument()
+  })
+
+  it('holds the spinner until the polled sync log completes, then refreshes', async () => {
+    // Real fetch stub: POST → log-1; first GET running, second GET success.
+    const fetchMock = stubSyncFetch('log-1', [
+      { id: 'log-1', completedAt: null, status: 'running' },
+      { id: 'log-1', completedAt: '2026-06-17T00:00:00Z', status: 'success' },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    render(<ToastProvider><SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={null} /></ToastProvider>)
+
+    await user.click(screen.getByRole('button', { name: /refresh all/i }))
+
+    // Spinner label shows while the poll loop runs (still on the running row).
+    expect(await screen.findByRole('button', { name: /syncing/i })).toBeInTheDocument()
+    expect(refreshMock).not.toHaveBeenCalled()
+
+    // Once the completed row arrives, refresh fires and the success toast shows.
+    // The real poll interval is 2000ms, so allow > 2s before asserting.
+    await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1), { timeout: 4000 })
+    expect(await screen.findByText('Accounts synced.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /refresh all/i })).toBeInTheDocument()
+  })
+
+  it('surfaces a loud toast on partial/failed sync', async () => {
+    const fetchMock = stubSyncFetch('log-2', [
+      { id: 'log-2', completedAt: '2026-06-17T00:00:00Z', status: 'partial' },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    render(<ToastProvider><SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={null} /></ToastProvider>)
+
+    await user.click(screen.getByRole('button', { name: /refresh all/i }))
+
+    expect(await screen.findByText('Sync finished with errors.')).toBeInTheDocument()
+    await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1))
+  })
+
+  it('surfaces a background-running toast and does not refresh when the poll fails', async () => {
+    // POST succeeds, but every status GET returns a 500 — pollSyncStatus rejects.
+    const fetchMock = vi.fn(async (_url: string, init?: { method?: string }) =>
+      init?.method === 'POST'
+        ? { ok: true, json: async () => ({ data: { syncLogId: 'log-3' } }) }
+        : { ok: false, status: 500, json: async () => ({}) },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const user = userEvent.setup()
+    render(<ToastProvider><SyncStatusPanel activeConnections={1} manualItems={0} lastSyncAt={null} /></ToastProvider>)
+
+    await user.click(screen.getByRole('button', { name: /refresh all/i }))
+
+    expect(await screen.findByText(/still running in the background/i)).toBeInTheDocument()
+    expect(refreshMock).not.toHaveBeenCalled()
+    // EH-01: failure is logged loudly, not swallowed.
+    expect(errorSpy).toHaveBeenCalled()
+    // Button recovers to its idle label (finally block ran).
     expect(screen.getByRole('button', { name: /refresh all/i })).toBeInTheDocument()
   })
 })

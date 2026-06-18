@@ -113,6 +113,7 @@
 | 100 | Inline edit + delete on transaction rows (§16) | [x] |
 | 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [x] |
 | 102 | Normalize app-wide date display to UTC (date-offset fix) | [x] |
+| 103 | "Refresh All" polls sync to completion before refreshing (dogfood UX) | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3723,3 +3724,43 @@ model AppSettings {
 **Depends on:** None
 **Specialist:** @ui-amibroke — display rendering (Velvet Ledger); formatter logic is plain TS
 **Completed:** 2026-06-09 (built + verified; commit pending `@code-review`)
+
+---
+
+# V1.2 — Sync Refresh UX (Task 103)
+
+## Task 103: Make "Refresh All" poll sync to completion before refreshing
+
+**Source:** Dogfooding friction (Session 48, 2026-06-17). The Accounts "Refresh All" button awaits the fire-and-forget `POST /api/sync` (returns instantly with a job id), stops its spinner, and `router.refresh()`es **before** the background sync has written anything — so balances look unchanged and there is no signal the sync is still running. The builder was restarting the prod server to "see" fresh data; in reality it was elapsed time letting the detached `runFullSync` finish. The `GET /api/sync/status` endpoint already exposes `status` (`running|success|partial|failed`) + `completedAt`; the button just never polls it.
+
+**Files:**
+- `src/app/api/sync/status/route.ts` — modify (accept optional `?id=` to target a specific sync log; keep latest-log fallback)
+- `src/components/accounts/SyncStatusPanel.tsx` — modify (poll loop + spinner held until done + result toast)
+- `src/components/accounts/pollSyncStatus.ts` — create (extract poll loop so `handleRefresh` stays < 50 logic lines, CQ-01)
+- `src/__tests__/components/accounts.test.tsx` — modify (add poll-path coverage)
+
+**Functions to implement:**
+- `GET(request: Request): Promise<Response>` in status route — if `?id=` present, return that exact `SyncLog` via `db.syncLog.findUnique({ where: { id } })`; else keep current `findFirst({ orderBy: { startedAt: 'desc' } })` (latest) behavior. Demo short-circuit (`demoNotFound()`) unchanged. Response shape stays `{ data: SyncLog | null }`.
+- `pollSyncStatus(syncLogId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<SyncLog>` — polls `GET /api/sync/status?id=${syncLogId}` every ~2s until the row's `completedAt != null` (status has left `running`); resolves with the final `SyncLog`. Rejects loudly with a contextful error on fetch failure (EH-01 — never silent) and on exceeding `timeoutMs` (~90s).
+- `handleRefresh(): Promise<void>` in `SyncStatusPanel` — `POST /api/sync` → read `data.syncLogId` → `await pollSyncStatus(syncLogId)` (spinner spins the whole time) → `router.refresh()` → toast the outcome. Demo-mode branch unchanged.
+
+**Acceptance criteria:**
+- [x] Spinner / "Syncing…" label stays active for the full duration of the real background sync, not ~1s.
+- [x] After the polled sync log reaches `success`/`partial`/`failed` (i.e. `completedAt` set), the button calls `router.refresh()` so new balances + `lastSyncAt` render with **no manual reload and no server restart**.
+- [x] `success` → success toast; `partial`/`failed` → loud error toast surfacing the failure (EH-01); the `errors` json is not swallowed.
+- [x] Polling targets the *started* job via `?id=` — a concurrent cron sync creating a newer log does not falsely complete or hang this one.
+- [x] Poll has a hard timeout (~90s) that resolves the spinner and shows a "still running in background" message rather than spinning forever.
+- [x] Demo mode unchanged: still short-circuits to `DEMO_TOAST_COPY.sync`, performs no fetch.
+- [x] CONSTRAINT-05: no visual change beyond existing button/spinner states. CQ-01: `handleRefresh` (20 lines) and `pollSyncStatus` (17 lines) each < 50 logic lines.
+- [x] `tsc --noEmit` clean; `npm run build` PASS.
+
+**Tests required:**
+- `describe('SyncStatusPanel')` → `it('holds the spinner until the polled sync log completes, then refreshes')` — mock POST→`{syncLogId}`, status `running`→`success`; assert `router.refresh` fires only after completion [happy]
+- `describe('SyncStatusPanel')` → `it('surfaces a loud toast on partial/failed sync')` [error case]
+- `describe('pollSyncStatus')` → `it('rejects on timeout without hanging')` [error case]
+
+**Depends on:** None
+**Specialist:** @data-sync — sync-status orchestration; button states follow existing Velvet Ledger patterns (no new design)
+
+**Session 48 (2026-06-17) — IMPLEMENTED:** `@dev` (subagent impl, orchestrator-verified). Added `src/components/accounts/pollSyncStatus.ts` (`pollSyncStatus` + named `SyncPollError`, injectable `intervalMs`/`timeoutMs`, named constants `POLL_INTERVAL_MS=2000`/`POLL_TIMEOUT_MS=90000`). `GET /api/sync/status` now takes optional `?id=` → `findUnique` (latest-log fallback preserved). `SyncStatusPanel.handleRefresh` POSTs `/api/sync`, polls to completion (spinner held), then `router.refresh()` + outcome toast; catch logs loudly via `console.error` (orchestrator addition — original swallowed the error) and shows a visible "still running" toast. Tests: 2 new in `accounts.test.tsx` (module-level `refreshMock`), new `pollSyncStatus.test.ts` (3: timeout/happy/fetch-fail), plus `?id=` branch test in `sync.test.ts`. Orchestrator independently verified: `tsc --noEmit` clean, full suite **66 files / 392 tests green** (was 65/386), `npm run build` PASS. Not yet committed — pending `@code-review`.
+**Completed:** 2026-06-17 (built + verified; commit pending `@code-review`)
