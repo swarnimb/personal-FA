@@ -56,3 +56,7 @@ docs/security-report.md
 
 # Throwaway spike scripts (per @assumptions framework — never commit)
 tmp/
+
+# /brag video output (renders, compositions, share copy)
+brag-output/
+brag-output-*/
