@@ -28,6 +28,89 @@ describe('normalizeMerchant', () => {
     expect(normalizeMerchant('lyft *ride sun')).toBe('lyft *ride sun')
   })
 
+  // --- T104: interior noise stripping ---------------------------------------
+  // Real descriptors from the builder's live ledger. Each recurring payment used
+  // to yield a fresh key per posting (date + reference embedded mid-string, payer
+  // name last), producing a single-use MerchantRule every month.
+  describe('interior noise (T104)', () => {
+    const RECURRING_SAMPLES: Array<[string, string, string]> = [
+      // [description, raw, expected]
+      [
+        'amex card payment',
+        'AMEX EPAYMENT    ACH PMT    260722 A0056           Swarnim Bagre',
+        'amex epayment ach pmt swarnim bagre',
+      ],
+      [
+        'chase card autopay',
+        'CHASE CREDIT CRD AUTOPAY    260715 000000000214988 BAGRE SWARNIM',
+        'chase credit crd autopay bagre swarnim',
+      ],
+      [
+        'paycheck',
+        'DELL MARKETING L PAYROLL    260227 938239748481EMP BAGRE,SWARNIM',
+        'dell marketing l payroll bagre,swarnim',
+      ],
+      [
+        'brokerage transfer',
+        'FID BKG SVC LLC  MONEYLINE  260227 Z2191554111KJOW SWARNIM BAGRE',
+        'fid bkg svc llc moneyline swarnim bagre',
+      ],
+      [
+        'rent',
+        'BILT PAYMENT     BILTRENT   260304 328d15660eb44a9 Swarnim Bagre',
+        'bilt payment biltrent swarnim bagre',
+      ],
+      [
+        'masked reference',
+        'CHASE CREDIT CRD AUTOPAY    XXXXXX XXXXXXXXXXX9520 BAGRE SWARNIM',
+        'chase credit crd autopay bagre swarnim',
+      ],
+    ]
+
+    it.each(RECURRING_SAMPLES)('collapses %s to a stable key', (_label, raw, expected) => {
+      expect(normalizeMerchant(raw)).toBe(expected)
+    })
+
+    it('gives every posting of one recurring payment the SAME key', () => {
+      const postings = [
+        'AMEX EPAYMENT    ACH PMT    260722 A0056           Swarnim Bagre',
+        'AMEX EPAYMENT    ACH PMT    260727 A0488           Swarnim Bagre',
+        'AMEX EPAYMENT    ACH PMT    260601 A1232           Swarnim Bagre',
+      ]
+      const keys = new Set(postings.map(normalizeMerchant))
+      expect(keys.size).toBe(1)
+    })
+
+    it('strips store numbers so branches of one merchant share a key', () => {
+      expect(normalizeMerchant("P. TERRY'S STAND #15")).toBe("p. terry's stand")
+      expect(normalizeMerchant("P. TERRY'S STAND #30")).toBe("p. terry's stand")
+    })
+
+    // Over-stripping guards. A token carrying punctuation is never noise, so
+    // digits glued to meaningful text survive.
+    it('keeps digits that are part of the merchant identity', () => {
+      expect(normalizeMerchant('7-ELEVEN')).toBe('7-eleven')
+      expect(normalizeMerchant('EXXON 7-ELEVEN')).toBe('exxon 7-eleven')
+      expect(normalizeMerchant('PAYPAL *APPLE.COM/BI8002752273 CA')).toBe(
+        'paypal *apple.com/bi8002752273 ca',
+      )
+      // 3-char and 1-digit tokens read as words, not references.
+      expect(normalizeMerchant('AMK DELL EMC TX PS2 CAFE')).toBe('amk dell emc tx ps2 cafe')
+      expect(normalizeMerchant('LYFT *RIDE SAT 3PM')).toBe('lyft *ride sat 3pm')
+    })
+
+    it('never empties a key that had content', () => {
+      // Every token reads as noise — falls back to the pre-step-6 form rather
+      // than producing an unmatchable empty key.
+      expect(normalizeMerchant('260722 A0056 XXXXXX')).not.toBe('')
+    })
+
+    it('returns empty only for genuinely empty input', () => {
+      expect(normalizeMerchant('')).toBe('')
+      expect(normalizeMerchant('   ')).toBe('')
+    })
+  })
+
   it('preserves embedded punctuation across multiple tokens', () => {
     expect(normalizeMerchant("MACY'S DEPT STORE")).toBe("macy's dept store")
   })

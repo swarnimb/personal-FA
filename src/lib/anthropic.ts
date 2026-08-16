@@ -20,7 +20,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
-import { SPENDING_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories'
+import { SPENDING_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '@/lib/categories'
 
 /**
  * Claude model used for categorization. Pinned per architecture.md § LLM
@@ -444,7 +444,13 @@ export async function categorizeMerchants(
       `Cannot categorize: AI feature is not available (reason: ${availability.reason ?? 'UNKNOWN'}).`,
     )
   }
-  const categories = isSpending ? SPENDING_CATEGORIES : INCOME_CATEGORIES
+  // Transfers are offered in BOTH directions regardless of sign: the model must
+  // still be able to classify a card payoff or loan payment, and those live in
+  // their own bucket rather than inside the income/spending lists (T104).
+  const categories = [
+    ...(isSpending ? SPENDING_CATEGORIES : INCOME_CATEGORIES),
+    ...TRANSFER_CATEGORIES,
+  ]
   const results: Array<{ category: string | null; rawResponse: string }> = []
   for (const batch of chunk(normalizedMerchants, MAX_MERCHANTS_PER_BATCH)) {
     results.push(...(await categorizeBatch(batch, categories)))

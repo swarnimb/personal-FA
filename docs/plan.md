@@ -114,6 +114,7 @@
 | 101 | Transactions nav item, demo placeholder, remove dead Income link (§16) | [x] |
 | 102 | Normalize app-wide date display to UTC (date-offset fix) | [x] |
 | 103 | "Refresh All" polls sync to completion before refreshing (dogfood UX) | [x] |
+| 104 | Merchant keys ignore interior dates/reference numbers; one-time rule re-key (dogfood) | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3764,3 +3765,56 @@ model AppSettings {
 
 **Session 48 (2026-06-17) — IMPLEMENTED:** `@dev` (subagent impl, orchestrator-verified). Added `src/components/accounts/pollSyncStatus.ts` (`pollSyncStatus` + named `SyncPollError`, injectable `intervalMs`/`timeoutMs`, named constants `POLL_INTERVAL_MS=2000`/`POLL_TIMEOUT_MS=90000`). `GET /api/sync/status` now takes optional `?id=` → `findUnique` (latest-log fallback preserved). `SyncStatusPanel.handleRefresh` POSTs `/api/sync`, polls to completion (spinner held), then `router.refresh()` + outcome toast; catch logs loudly via `console.error` (orchestrator addition — original swallowed the error) and shows a visible "still running" toast. Tests: 2 new in `accounts.test.tsx` (module-level `refreshMock`), new `pollSyncStatus.test.ts` (3: timeout/happy/fetch-fail), plus `?id=` branch test in `sync.test.ts`. Orchestrator independently verified: `tsc --noEmit` clean, full suite **66 files / 392 tests green** (was 65/386), `npm run build` PASS. Not yet committed — pending `@code-review`.
 **Completed:** 2026-06-17 (built + verified; commit pending `@code-review`)
+
+---
+
+### Task 104 — Merchant keys ignore interior dates/reference numbers + one-time rule re-key
+
+**Status:** [x]
+**Source:** Dogfooding friction — "every refresh asks me to review transactions I've already categorized, especially the credit-card payments from my bank account."
+
+**Root cause (measured on live data, not inferred):** `MerchantRule.normalizedMerchant` is the primary key, and `normalizeMerchant`'s noise-stripping regex was anchored to END-of-string. Bank ACH descriptors put the payer name last and the volatile date + reference number in the MIDDLE:
+
+```
+AMEX EPAYMENT  ACH PMT  260722 A0056  Swarnim Bagre
+AMEX EPAYMENT  ACH PMT  260727 A0488  Swarnim Bagre   <- different key, no match
+```
+
+So every posting of every recurring payment produced a unique, single-use rule. Live audit: **256 rules, of which 51 were duplicates of 11 real merchants** — 14 for the Amex payment, 11 Fidelity, 8 Chase, 8 for the builder's own paycheck. Each would have kept spawning one new dead rule per month forever.
+
+**Files changed:**
+- `src/lib/merchant.ts` — Step 6 in `normalizeMerchant`: drop interior noise tokens via new `isNoiseToken`.
+- `src/lib/categorize.ts` — Step 3b: `Loan` accounts categorize by sign (`Transfer In` / `Transfer Out`).
+- `src/lib/review-queries.ts`, `src/lib/review-apply.ts` — `Loan` added to `EXCLUDED_ACCOUNT_TYPES`.
+- `src/lib/backfill-investment-categorization.ts` — scope widened to `Loan`.
+- `src/lib/rekey-merchant-rules.ts` (new) — pure `planRekey` + transactional `rekeyMerchantRules`.
+- `scripts/rekey-merchant-rules.ts` (new) — dry-run-by-default runner.
+
+**Acceptance criteria:**
+- [x] Every posting of one recurring payment normalizes to the same key; verified against 10 *invented future* descriptors the bank has never sent — **10/10 matched, 0 to Review**.
+- [x] Over-stripping guarded: a token carrying punctuation is never noise, so `7-ELEVEN` survives intact and `PAYPAL *APPLE.COM/BI8002752273` keeps `apple.com`.
+- [x] A key is never emptied by stripping — falls back to the pre-step-6 form.
+- [x] Re-key runs in ONE `$transaction`; conflicts are reported, never silently merged; decided categories validated against `ALL_CATEGORIES` before any write.
+- [x] `USER` provenance survives a merge with `AI` rules.
+- [x] Loan postings with an EMPTY description (SimpleFin auto-debits) no longer sit `Uncategorized` and invisible to Review.
+- [x] Transfers count toward neither the Income nor the Spending total; verified through the REAL app queries, not a hand-written SQL copy.
+- [x] `tsc --noEmit` clean; full suite **68 files / 435 tests** green (was 66/393); `npm run build` PASS.
+
+**Builder decisions recorded in `CATEGORY_DECISIONS` (3 merge conflicts):**
+- Fidelity moneyline → `Transfer Out` (10 v 1 majority agreed).
+- Mazda loan payment → `Transfer Out`. The loan IS linked as a `Loan` account, so the payment appears twice — checking −$498.50, loan +$498.50. Net worth unchanged; counting it as `Transport` would double-count one event.
+- Remitly → `Other` (overriding the 2 v 1 majority for `Transfer Out`). Money to someone else's account is not internal movement, and `Transfer Out` is excluded from Spending, which would have hidden a real outflow. `Other` is a spending category.
+
+**Category corrections (`CATEGORY_CORRECTIONS`):** three fuel merchants filed as `Utilities` → `Transport` (`7-eleven`, `qt outside`, `7th st diamond shamraustin tx`).
+
+**Applied to live data (2026-08-16):** 256 rules → **205**; 7 transactions re-categorized; 3 blank-description Mazda postings → `Transfer In`; **0 `Uncategorized` remaining**. Reported income corrected from $82,556.21 to **$62,989.24**; spending total $27,486.43 with no transfer rows in either breakdown. Pre-run backup of all 256 rules + 820 transaction categories taken to the session scratchpad.
+
+**Follow-on found mid-task (builder-directed):** the builder pushed back on the sign-blind loan rule — "there is no transfer coming in from Mazda... it should be based on the sign and the money flow." Correct, and chasing it exposed a much larger pre-existing bug: `'Transfer In'` sat inside `INCOME_CATEGORIES`, so every credit-card payoff was summed as **income**. Live data: reported income $82,556.21 against real income $62,989.24 — **overstated by $19,566.97 (24%)** across 27 postings on 5 credit cards.
+
+Fix: a third bucket. `TRANSFER_CATEGORIES = ['Transfer In', 'Transfer Out']`, removed from both `INCOME_CATEGORIES` and `SPENDING_CATEGORIES`, added to `SPENDING_EXCLUDED_CATEGORIES` and the new `INCOME_EXCLUDED_CATEGORIES`. Transfers are now named by the direction money actually moved (paying account `Transfer Out`, receiving account `Transfer In`) while counting toward NEITHER total — a transfer is two postings of one event that leaves net worth unchanged. `buildCategorizationPrompt` still offers both directions to the LLM, so card payoffs remain classifiable. New `src/__tests__/lib/categories.test.ts` locks the three buckets disjoint and asserts no transfer reaches a total.
+
+Loan Step 3b is therefore sign-aware after all: positive (debt reduced) → `Transfer In`, negative → `Transfer Out`.
+
+**Known limit (deliberate, not shipped):** rules still match on an EXACT key. A "contains" rule type (e.g. *anything containing `coffee` → Dining*) was scoped and deferred — with interior noise now stripped, re-assess whether it is still needed. Today it would affect ~4 rules.
+
+**Completed:** 2026-08-16

@@ -8,6 +8,7 @@ vi.mock('@/lib/db', () => ({
 
 import { db } from '@/lib/db'
 import { categorizeTransaction, MerchantRuleLookupError } from '../../lib/categorize'
+import { isIncomeCategory, isTransferCategory, SPENDING_CATEGORIES } from '../../lib/categories'
 
 type MockFn = ReturnType<typeof vi.fn>
 const mockDb = db as unknown as { merchantRule: { findUnique: MockFn } }
@@ -130,6 +131,52 @@ describe('categorizeTransaction — 4-step precedence (V1.1 Phase 2)', () => {
       CHECKING,
     )
     expect(result).toBe('Uncategorized')
+  })
+
+  // --- T104 Step 3b: Loan accounts -----------------------------------------
+  describe('Step 3b: Loan account', () => {
+    const LOAN = { type: 'Loan' as const }
+
+    it('positive amount (debt reduced) → Transfer In', async () => {
+      const result = await categorizeTransaction({ merchant: 'MAZDA PAYMENT', amountCents: 49850 }, LOAN)
+      expect(result).toBe('Transfer In')
+    })
+
+    it('negative amount (debt grown) → Transfer Out', async () => {
+      const result = await categorizeTransaction({ merchant: 'LOAN ADVANCE', amountCents: -49850 }, LOAN)
+      expect(result).toBe('Transfer Out')
+    })
+
+    it('never resolves a Loan posting to an income OR spending category', async () => {
+      // The whole point of the transfer bucket: a loan posting is the paired half
+      // of an outflow already counted on the paying account. If either direction
+      // leaked into a total, one event would be counted twice.
+      for (const amountCents of [49850, -49850, 0]) {
+        const result = await categorizeTransaction({ merchant: 'MAZDA PAYMENT', amountCents }, LOAN)
+        expect(isTransferCategory(result)).toBe(true)
+        expect(isIncomeCategory(result)).toBe(false)
+        expect(SPENDING_CATEGORIES).not.toContain(result)
+      }
+    })
+
+    it('rescues an EMPTY description — no rule can ever match an empty key', async () => {
+      const result = await categorizeTransaction({ merchant: '', amountCents: 49850 }, LOAN)
+      expect(result).toBe('Transfer In')
+    })
+
+    it('Step 2 still wins: an interest keyword on a Loan account → Interest & Dividends', async () => {
+      const result = await categorizeTransaction(
+        { merchant: 'INTEREST CHARGE', amountCents: -1200 },
+        LOAN,
+      )
+      expect(result).toBe('Interest & Dividends')
+    })
+
+    it('Step 1 still wins: a MerchantRule beats the Loan filter', async () => {
+      mockDb.merchantRule.findUnique.mockResolvedValue({ category: 'Transport' })
+      const result = await categorizeTransaction({ merchant: 'MAZDA PAYMENT', amountCents: 49850 }, LOAN)
+      expect(result).toBe('Transport')
+    })
   })
 })
 

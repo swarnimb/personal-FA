@@ -20,11 +20,11 @@ export class ReviewQueryError extends Error {
 // already classified (by MerchantRule, keyword engine, or the investment filter).
 const UNCATEGORIZED = 'Uncategorized'
 
-// Account types whose transactions auto-categorize to 'Transfer Out' at sync
-// time (T81 Step 3) and must NEVER reach Review. Defense-in-depth: this query
-// re-filters them even if a historical row slipped through. Mirrors
-// `INVESTMENT_ACCOUNT_TYPES` in src/lib/categorize.ts.
-const EXCLUDED_ACCOUNT_TYPES: readonly AccountType[] = ['Investment', 'Crypto']
+// Account types whose transactions auto-categorize to a transfer at sync time
+// (T81 Step 3 for Investment/Crypto, T104 Step 3b for Loan) and must NEVER reach
+// Review. Defense-in-depth: this query re-filters them even if a historical row
+// slipped through. Mirrors the same steps in src/lib/categorize.ts.
+const EXCLUDED_ACCOUNT_TYPES: readonly AccountType[] = ['Investment', 'Crypto', 'Loan']
 
 /** A single uncategorized transaction row as needed for grouping. */
 type UncatRow = {

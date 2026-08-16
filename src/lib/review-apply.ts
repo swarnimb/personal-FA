@@ -34,9 +34,9 @@ export class ApplyError extends Error {
 
 // Account types whose transactions auto-categorize at sync time and must never
 // be retro-categorized by a MerchantRule apply. Mirrors the same exclusion in
-// `src/lib/review-queries.ts` (T87) and `INVESTMENT_ACCOUNT_TYPES` in
-// `src/lib/categorize.ts` (T81 defense-in-depth).
-const EXCLUDED_ACCOUNT_TYPES: readonly AccountType[] = ['Investment', 'Crypto']
+// `src/lib/review-queries.ts` (T87) and the Step 3 / Step 3b filters in
+// `src/lib/categorize.ts` (T81 + T104 defense-in-depth).
+const EXCLUDED_ACCOUNT_TYPES: readonly AccountType[] = ['Investment', 'Crypto', 'Loan']
 
 /** One categorization assignment from the Review UI (T89) or rule-edit path (T92). */
 export interface Assignment {

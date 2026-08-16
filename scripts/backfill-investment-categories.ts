@@ -26,7 +26,7 @@ import {
 function printResult(result: InvestmentBackfillResult, dryRun: boolean): void {
   const mode = dryRun ? 'DRY RUN (no writes)' : 'APPLY (writes committed)'
   process.stdout.write(`\n=== Investment categorization backfill — ${mode} ===\n`)
-  process.stdout.write(`Scanned (Uncategorized, non-overridden, Investment/Crypto): ${result.scanned}\n`)
+  process.stdout.write(`Scanned (Uncategorized, non-overridden, Investment/Crypto/Loan): ${result.scanned}\n`)
   process.stdout.write(`Would change: ${result.changes.length}   Unchanged (still no fit): ${result.unchanged}\n`)
 
   if (result.changes.length > 0) {

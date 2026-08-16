@@ -47,14 +47,21 @@ async function computeChange(row: {
 }
 
 /**
- * One-time corrective backfill for Investment/Crypto transactions that are
- * stuck `Uncategorized` because they predate the T81 investment→Transfer Out
- * rule and nothing ever revisits them.
+ * One-time corrective backfill for Investment/Crypto/Loan transactions that are
+ * stuck `Uncategorized` because they predate the rule that would have classified
+ * them (T81 investment→Transfer Out; T104 loan→sign-aware transfer) and nothing
+ * ever revisits them.
  *
  * Reuses the EXISTING rule logic in `categorizeTransaction` (merchant-rule →
- * keyword engine → investment-account filter). It therefore runs NO LLM and
- * costs ZERO: dividend/interest merchants resolve to `'Interest & Dividends'`,
- * everything else on an Investment/Crypto account resolves to `'Transfer Out'`.
+ * keyword engine → investment-account filter → loan-account filter). It therefore
+ * runs NO LLM and costs ZERO: dividend/interest merchants resolve to
+ * `'Interest & Dividends'`, everything else on an Investment/Crypto account
+ * resolves to `'Transfer Out'`, and Loan postings resolve by sign.
+ *
+ * Loan rows are the reason this covers more than its name suggests: SimpleFin
+ * sends loan auto-debits with an EMPTY description, which normalizes to an empty
+ * key. No `MerchantRule` can match it and the Review queue skips it, so without
+ * this pass those rows stay `Uncategorized` and invisible forever.
  *
  * Only touches rows with `category = 'Uncategorized'` AND
  * `categoryOverridden = false`, so any user-confirmed override is preserved.
@@ -74,7 +81,7 @@ export async function backfillInvestmentCategorization(
     where: {
       category: UNCATEGORIZED,
       categoryOverridden: false,
-      account: { type: { in: ['Investment', 'Crypto'] } },
+      account: { type: { in: ['Investment', 'Crypto', 'Loan'] } },
     },
     select: { id: true, merchant: true, amountCents: true, account: { select: { name: true, type: true } } },
   })

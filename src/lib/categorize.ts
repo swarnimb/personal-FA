@@ -19,6 +19,7 @@ export class MerchantRuleLookupError extends Error {
 
 const UNCATEGORIZED = 'Uncategorized'
 const TRANSFER_OUT = 'Transfer Out'
+const TRANSFER_IN = 'Transfer In'
 const INVESTMENT_ACCOUNT_TYPES: ReadonlySet<AccountType> = new Set(['Investment', 'Crypto'])
 
 async function lookupMerchantRule(merchant: string): Promise<string | null> {
@@ -56,6 +57,21 @@ function applyKeywordEngine(merchant: string, amountCents: number): string {
  *      `account.type ∈ {Investment, Crypto}` → `'Transfer Out'`. Fires only on
  *      Step 2 = `'Uncategorized'`, so a dividend keyword on an investment account
  *      still classifies as `'Interest & Dividends'`.
+ *   3b. Loan-account filter (T104) — if Step 2 returned `'Uncategorized'` AND
+ *      `account.type === 'Loan'` → the transfer category matching the direction
+ *      the money actually moved: a positive amount reduces the debt
+ *      (`'Transfer In'`), a negative one grows it (`'Transfer Out'`).
+ *
+ *      Naming by direction is safe because BOTH transfer categories are excluded
+ *      from the income AND spending totals (`TRANSFER_CATEGORIES`). The paired
+ *      outflow on the paying account is already categorized, so counting either
+ *      posting would double-count one event that left net worth unchanged. The
+ *      ledger still reads the way the money moved.
+ *
+ *      This also rescues loan postings that arrive with an EMPTY description
+ *      (SimpleFin sends these for auto-debits): they normalize to an empty key,
+ *      so no `MerchantRule` can ever match them and the Review queue skips them —
+ *      leaving them permanently `'Uncategorized'` and invisible.
  *   4. Otherwise → `'Uncategorized'` (flows to Review queue).
  *
  * Callers are responsible for honoring `categoryOverridden = true` — this function
@@ -72,5 +88,6 @@ export async function categorizeTransaction(
   if (keywordCategory !== UNCATEGORIZED) return keywordCategory
 
   if (INVESTMENT_ACCOUNT_TYPES.has(account.type)) return TRANSFER_OUT
+  if (account.type === 'Loan') return input.amountCents >= 0 ? TRANSFER_IN : TRANSFER_OUT
   return UNCATEGORIZED
 }
