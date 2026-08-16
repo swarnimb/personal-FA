@@ -1,5 +1,5 @@
 import type { AccountType } from '@prisma/client'
-import { KEYWORD_RULES } from './categorization-rules'
+import { KEYWORD_RULES, ruleMatches } from './categorization-rules'
 import { db } from './db'
 import { normalizeMerchant } from './merchant'
 
@@ -41,8 +41,9 @@ function applyKeywordEngine(merchant: string, amountCents: number): string {
   for (const rule of KEYWORD_RULES) {
     if (rule.requirePositive && amountCents <= 0) continue
     if (rule.requireNegative && amountCents >= 0) continue
-    if (rule.excludeKeywords?.some((kw) => upper.includes(kw))) continue
-    if (rule.keywords.some((kw) => upper.includes(kw))) return rule.category
+    // Keyword/prefix/veto semantics live with the catalog (T105) so the rule
+    // shape and its matcher cannot drift apart.
+    if (ruleMatches(rule, upper)) return rule.category
   }
   return UNCATEGORIZED
 }

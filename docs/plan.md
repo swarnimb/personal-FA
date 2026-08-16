@@ -115,6 +115,7 @@
 | 102 | Normalize app-wide date display to UTC (date-offset fix) | [x] |
 | 103 | "Refresh All" polls sync to completion before refreshing (dogfood UX) | [x] |
 | 104 | Merchant keys ignore interior dates/reference numbers; one-time rule re-key (dogfood) | [x] |
+| 105 | Obvious-dining auto-categorization: whole-word keyword matching + expanded catalog | [x] |
 
 **Recommended build order (V1.0):** 1 → 2+3+4 (parallel) → 5+6+7+9 (parallel) → 8+10+11-16 → 17-23 → 24 → 25
 
@@ -3816,5 +3817,48 @@ Fix: a third bucket. `TRANSFER_CATEGORIES = ['Transfer In', 'Transfer Out']`, re
 Loan Step 3b is therefore sign-aware after all: positive (debt reduced) → `Transfer In`, negative → `Transfer Out`.
 
 **Known limit (deliberate, not shipped):** rules still match on an EXACT key. A "contains" rule type (e.g. *anything containing `coffee` → Dining*) was scoped and deferred — with interior noise now stripped, re-assess whether it is still needed. Today it would affect ~4 rules.
+
+**Completed:** 2026-08-16
+
+---
+
+### Task 105 — Obvious-dining auto-categorization (whole-word matching + expanded catalog)
+
+**Status:** [x]
+**Source:** Dogfooding — "anything that is obviously dining or bars based on the name should be automatically marked as such."
+
+**Builder's bar (binding):** *"If it's not a clear obvious decision, don't mark it... I don't want 60-70% accuracy, it should be 90%+, if not, then I don't mind doing the manual review of those."* Precision is the objective; coverage is whatever precision allows.
+
+**Why whole-word matching:** the engine matched keywords with naive `includes()`. Measured across 284 live merchants, a broad dining word list produced 4 false positives — `BAR` inside `AMC BARTON CREEK` and `MACYS BARTON CREEK`, `PHO` inside `PHOENIX AUTO`. Switching the dining catalog to whole-word cut that to 1. `matchMode` defaults to `'substring'` so every V1.0 rule keeps its behavior.
+
+**Signals measured on live data, then pruned to the builder's bar:**
+
+| Signal | Precision | Verdict |
+|---|---|---|
+| Cuisine/venue words (whole-word) | 100% | keep |
+| Brand names (substring) | 100% | keep |
+| `DD *`, `CTLP*`, `FSP*` (food-only processors) | 100% | keep |
+| `TST*` (Toast) | 82% (14/17) | **dropped** — also bills a mini-golf venue + 2 shops |
+| `SQ *` (Square) | 82% (18/22) | **dropped** — also bills a tennis club, ferry terminal, water utility |
+| `WINE` | 50% (1/2) | **dropped** — caught `TOTAL WINE AND MORE`; `WINERY` kept |
+
+Brands use substring matching by design: descriptors mangle them (`HOPDODDYBURGERBAR` concatenated, `WENDY'S 123` and `057 TORCHYS OLO HULEN` digit-laden), and the strings are distinctive enough that substring is safe. Ambiguous brands deliberately excluded: `SUBWAY` (mass transit), `SONIC` (ISP), `CAVA` (wine style).
+
+**Files changed:**
+- `src/lib/categorization-rules.ts` — `MatchMode`, `prefixes`, exported `ruleMatches` with a compiled-pattern cache; `DINING_BRANDS` / `DINING_WORDS` / `DINING_PREFIXES`.
+- `src/lib/categorize.ts` — `applyKeywordEngine` delegates to `ruleMatches`.
+- `src/__tests__/lib/categorization-rules.test.ts` (new, 40 tests).
+
+**Acceptance criteria:**
+- [x] Verified by running the REAL engine over all 284 live merchants: **43 guessed dining, 43 correct, 0 wrong — 100% precision**, 68% coverage (43/63). Clears the 90% bar with margin.
+- [x] The four historical false positives (`BARTON CREEK` x2, `PHOENIX AUTO`, `TOTAL WINE`) no longer classify.
+- [x] `TST*` / `SQ *` explicitly fall through to Review, asserted by test.
+- [x] Rule precedence preserved: Groceries still beats dining for `WHOLE FOODS`; dining still beats Transport for `UBEREATS`; a plain `UBER TRIP` is still Transport; sign-aware transfer rules unchanged.
+- [x] `matchMode` defaults to substring — zero behavior change for non-dining rules.
+- [x] `tsc --noEmit` clean; suite **69 files / 475 tests** green (was 68/435); `npm run build` PASS.
+
+**Deliberately not done:** no schema change, no new UI, no retroactive re-categorization. The engine is Step 2 — it only fires for merchants with no `MerchantRule`, so this affects first-sight guesses only and cannot overwrite anything already categorized.
+
+**Known limit:** the generic English words (`BAR`, `FOOD`, `TEA`, `EATS`) are clean on current data but are the likeliest future misses — a "Bar Method" studio or a "Food Lion" would fool them. Kept per the builder's call: one correction writes a `MerchantRule` that overrides the engine permanently, so the cost is a single edit.
 
 **Completed:** 2026-08-16
