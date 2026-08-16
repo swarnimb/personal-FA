@@ -278,3 +278,5 @@
 | 18 | Investment/Crypto value from live `Account` balance; daily `BalanceSnapshot` for history only | Value/allocation read `currentBalanceCents`, never aggregate snapshots; sync writes one snapshot/day/account for the history chart | Session 39 / builder | 2026-06-04 |
 | 19 | CQ-01 measured on logic, not JSX render bodies | Extract logic to pass CQ-01; don't fragment JSX for line count | Session 43 / T97 / builder | 2026-06-04 |
 | 20 | Date-only (`@db.Date`) display via `formatDateUTC` | Render stored dates with `formatDateUTC` (UTC-anchored); never raw `new Date(x).toLocaleDateString()` | Task 102 / Session 47 / builder | 2026-06-09 |
+| 21 | Transfers count toward neither Income nor Spending | `TRANSFER_CATEGORIES` sits outside both lists; every income/spending query excludes both directions | Session 49 / T104 / FB-30 / builder | 2026-08-16 |
+| 22 | Auto-categorization signals need ≥90% measured precision | Measure a candidate keyword/prefix against live merchants before shipping it; below the bar it goes to Review, not a guess | Session 49 / T105 / builder | 2026-08-16 |

@@ -463,3 +463,18 @@
 **Check before approving:** This is the only page that works this way — a deliberate exception, not a new default. It reads data the API already returns (no financial math happens in the browser), so the "all calculations in PostgreSQL" guarantee (CALC-01) is untouched. If a future tab needs the same live-filter feel, this is the pattern to copy.
 
 **What this closes off:** Nothing — fully reversible. If desired later, the page could be converted to server-fetch with server-driven pagination; the API contract wouldn't change.
+
+---
+
+## FB-30: Transfers Count as Neither Income Nor Spending
+
+**Date:** 2026-08-16
+**Architecture section:** `docs/architecture.md` § Category Buckets: Income / Spending / Transfer
+
+**Decided:** Moving money between your own accounts — paying a credit card, paying the car loan, funding a brokerage — is now its own category bucket that is excluded from both the Income total and the Spending total. The labels still describe the real direction of the money: the account paying gets "Transfer Out", the account receiving gets "Transfer In".
+
+**Means for your product:** Your reported income dropped from $82,556.21 to $62,989.24. The difference was $19,566.97 of credit-card payments that the app had been counting as money you earned. The new number is your actual income. Nothing about your net worth, balances, or spending changed — only what gets summed into the Income figure.
+
+**Check before approving:** A transfer creates two entries — one on each account. Previously the receiving side was filed as income, so every card payoff inflated the total. Now neither side is counted, which is correct, because the event does not change your net worth. Both directions are still fully visible in the Transactions browser and still selectable when you categorize by hand; only the totals changed.
+
+**What this closes off:** Nothing structural, and it is reversible by moving the categories back into the income/spending lists. Deliberately deferred: a dedicated "Transfers" view showing internal money movement over time, which the data now supports cleanly.

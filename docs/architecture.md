@@ -564,3 +564,44 @@ Unlike every other tab — which fetches on the server via a `lib/*-queries.ts` 
 ### Known limitation
 
 Table dates render via `new Date(tx.date).toLocaleDateString(...)` (local TZ) while the edit modal pre-fills via `tx.date.split('T')[0]` (UTC date portion), so a transaction can show one day apart between table and editor in non-UTC zones. This is a **pre-existing, app-wide** convention (identical in Spending/Income/Pending lists + EditPendingModal), not introduced here; saving is idempotent (no corruption). Tracked for a future app-wide date-normalization task. See `docs/qa-report.md`.
+
+---
+
+## Category Buckets: Income / Spending / Transfer (Session 49, T104)
+
+`src/lib/categories.ts` splits categories into **three** disjoint buckets, not two.
+
+| Bucket | Constant | Counted by |
+|---|---|---|
+| Earnings | `INCOME_CATEGORIES` | Income page |
+| Expenses | `SPENDING_CATEGORIES` | Spending page + Dashboard |
+| Movement between owned accounts | `TRANSFER_CATEGORIES` | **neither** |
+
+`TRANSFER_CATEGORIES = ['Transfer In', 'Transfer Out']`. Both appear in
+`SPENDING_EXCLUDED_CATEGORIES` and `INCOME_EXCLUDED_CATEGORIES`, so no query sums
+either one.
+
+**Why a third bucket.** `'Transfer In'` previously lived inside
+`INCOME_CATEGORIES`, so the receiving leg of every credit-card payoff was summed
+as earnings — overstating reported income by $19,566.97 (24%) on live data. A
+transfer is two postings of one event that leaves net worth unchanged; if either
+leg reaches a total, that event is counted twice.
+
+Transfers keep **directional** names so the ledger reads the way money moved (the
+paying account gets `Transfer Out`, the receiving account `Transfer In`). Naming
+is presentation; bucket membership is what controls the math.
+
+**Consequences for callers:**
+- Income queries use `category IN (INCOME_CATEGORIES)` — an allowlist, so
+  removing `Transfer In` from that list was sufficient to fix the totals.
+- `buildCategorizationPrompt` appends `TRANSFER_CATEGORIES` to whichever
+  directional list it offers the LLM; otherwise card payoffs become unclassifiable.
+- `ALL_CATEGORIES` and `SELECTABLE_CATEGORIES_SORTED` still include both
+  directions — the buckets changed, not the choices available in the UI.
+
+**Loan accounts** (`categorize.ts` Step 3b) resolve by sign: positive reduces the
+debt (`Transfer In`), negative grows it (`Transfer Out`). Safe precisely because
+neither reaches a total. This also rescues SimpleFin's blank-description loan
+auto-debits, which normalize to an empty key that no `MerchantRule` can match.
+
+See CONSTRAINT-21, FB-30.
